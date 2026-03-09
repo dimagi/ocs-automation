@@ -1,0 +1,47 @@
+# session/docker-compose.yml
+# Template for per-task Claude Code sessions.
+# Usage: TASK_ID=<id> TASK_PROMPT="..." docker compose up
+services:
+  claude:
+    build:
+      context: /opt/ocs-automation/session
+      dockerfile: Dockerfile
+    container_name: "session-${TASK_ID}"
+    environment:
+      TASK_ID: "${TASK_ID}"
+      TASK_PROMPT: "${TASK_PROMPT}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+      DJANGO_SETTINGS_MODULE: "settings"
+      DATABASE_URL: "postgresql://postgres:postgres@db:5432/ocs"
+      DOCS_REPO_URL: "https://github.com/dimagi/open-chat-studio-docs.git"
+    volumes:
+      - "/data/sessions/${TASK_ID}:/workspace"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    container_name: "session-${TASK_ID}-db"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ocs
+    volumes:
+      - "/data/sessions/${TASK_ID}/postgres:/var/lib/postgresql/data"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: "session-${TASK_ID}-redis"
+    volumes:
+      - "/data/sessions/${TASK_ID}/redis:/data"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
