@@ -1,14 +1,14 @@
 # infra/s3.py
 import pulumi_aws as aws
-from infra.config import make_name, PROJECT_NAME
+from infra.config import make_name, PROJECT_NAME, environment
 
 
 def create_artifacts_bucket() -> aws.s3.BucketV2:
     """S3 bucket for session artifacts (logs, outputs)."""
     bucket = aws.s3.BucketV2(
         make_name("artifacts"),
-        bucket=f"{PROJECT_NAME}-artifacts",
-        tags={"Project": PROJECT_NAME},
+        bucket=f"{PROJECT_NAME}-{environment}-artifacts",
+        tags={"Name": make_name("artifacts"), "Project": PROJECT_NAME},
     )
 
     aws.s3.BucketVersioningV2(
