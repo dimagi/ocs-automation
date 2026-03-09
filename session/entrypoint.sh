@@ -4,26 +4,25 @@
 set -euo pipefail
 
 TASK_ID="${TASK_ID:-unknown}"
-TASK_PROMPT="${TASK_PROMPT:-}"
 REPO_URL="${REPO_URL:-https://github.com/dimagi/open-chat-studio.git}"
 DOCS_REPO_URL="${DOCS_REPO_URL:-https://github.com/dimagi/open-chat-studio-docs.git}"
 ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"
 
 echo "[session:$TASK_ID] Starting"
 
-# Clone or update app repo
-if [ ! -d /workspace/app/.git ]; then
-    git clone --depth=1 "$REPO_URL" /workspace/app
-else
-    git -C /workspace/app pull --ff-only
-fi
+# Clone repo if needed, otherwise fast-forward update
+clone_or_update() {
+    local url="$1"
+    local dir="$2"
+    if [ ! -d "$dir/.git" ]; then
+        git clone --depth=1 "$url" "$dir"
+    else
+        git -C "$dir" pull --ff-only
+    fi
+}
 
-# Clone or update docs repo (available at /workspace/docs for context)
-if [ ! -d /workspace/docs/.git ]; then
-    git clone --depth=1 "$DOCS_REPO_URL" /workspace/docs
-else
-    git -C /workspace/docs pull --ff-only
-fi
+clone_or_update "$REPO_URL" /workspace/app
+clone_or_update "$DOCS_REPO_URL" /workspace/docs
 
 cd /workspace/app
 
@@ -34,14 +33,22 @@ until pg_isready -h db -p 5432 -U postgres; do sleep 1; done
 # Run Django migrations
 uv run python manage.py migrate --noinput
 
+# Read task prompt from mounted file (written by session-manager.sh)
+TASK_PROMPT_FILE="/workspace/task-prompt.txt"
+if [ ! -f "$TASK_PROMPT_FILE" ]; then
+    echo "ERROR: task-prompt.txt not found at $TASK_PROMPT_FILE" >&2
+    exit 1
+fi
+
 # Run Claude Code via acpx in headless mode
+# stderr goes to a separate log so output.json stays parseable
 echo "[session:$TASK_ID] Launching Claude Code"
 acpx run \
     --agent claude-code \
     --workspace /workspace/app \
-    --prompt "$TASK_PROMPT" \
+    --prompt "$(cat "$TASK_PROMPT_FILE")" \
     --output-format json \
-    > /workspace/output.json 2>&1
+    > /workspace/output.json 2>/workspace/acpx-stderr.log
 
 echo "[session:$TASK_ID] Complete"
 cat /workspace/output.json
