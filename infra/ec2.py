@@ -1,13 +1,23 @@
 # infra/ec2.py
+import pathlib
+from typing import TypedDict
+
 import pulumi
 import pulumi_aws as aws
-from infra.config import make_name, instance_type
+from infra.config import make_name, instance_type, PROJECT_NAME
+
+
+class InstanceResources(TypedDict):
+    instance: aws.ec2.Instance
+    eip: aws.ec2.Eip
+    data_volume: aws.ebs.Volume
 
 
 def create_instance(
     security_group_id: pulumi.Output,
     instance_profile_name: pulumi.Output,
-) -> dict:
+    domain: str,
+) -> InstanceResources:
     """
     EC2 instance for OpenClaw.
     - Ubuntu 24.04 LTS (ap-southeast-2)
@@ -15,7 +25,6 @@ def create_instance(
     - SSM-managed, no SSH key required
     """
 
-    # Ubuntu 24.04 LTS AMI — look up dynamically from Canonical
     ami = aws.ec2.get_ami(
         most_recent=True,
         owners=["099720109477"],  # Canonical
@@ -28,8 +37,8 @@ def create_instance(
         ],
     )
 
-    with open("scripts/bootstrap.sh") as f:
-        user_data = f.read()
+    bootstrap_path = pathlib.Path(__file__).parent.parent / "scripts" / "bootstrap.sh"
+    user_data = bootstrap_path.read_text().replace("__DOMAIN__", domain)
 
     instance = aws.ec2.Instance(
         make_name("instance"),
@@ -38,16 +47,15 @@ def create_instance(
         iam_instance_profile=instance_profile_name,
         vpc_security_group_ids=[security_group_id],
         user_data=user_data,
-        user_data_replace_on_change=False,
+        user_data_replace_on_change=False,  # Intentional: bootstrap runs once at first boot only
         root_block_device=aws.ec2.InstanceRootBlockDeviceArgs(
             volume_size=100,
             volume_type="gp3",
             delete_on_termination=True,
         ),
-        tags={"Name": make_name("instance"), "Project": "ocs-automation"},
+        tags={"Name": make_name("instance"), "Project": PROJECT_NAME},
     )
 
-    # Separate data EBS volume (persists if instance replaced)
     data_volume = aws.ebs.Volume(
         make_name("data-volume"),
         availability_zone=instance.availability_zone,
@@ -63,11 +71,10 @@ def create_instance(
         device_name="/dev/sdf",
     )
 
-    # Elastic IP for stable address
     eip = aws.ec2.Eip(
         make_name("eip"),
         instance=instance.id,
         tags={"Name": make_name("eip")},
     )
 
-    return {"instance": instance, "eip": eip, "data_volume": data_volume}
+    return InstanceResources(instance=instance, eip=eip, data_volume=data_volume)
