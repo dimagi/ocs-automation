@@ -1,8 +1,9 @@
+# infra/secrets.py
 import pulumi_aws as aws
-from infra.config import make_name
+from infra.config import make_name, PROJECT_NAME
 
 
-def create_secrets() -> dict:
+def create_secrets() -> dict[str, aws.secretsmanager.Secret]:
     """
     Create Secrets Manager secrets for OpenClaw.
     Values are set manually after deployment — never in code.
@@ -17,17 +18,17 @@ def create_secrets() -> dict:
     # Format: KEY=value lines (dotenv format)
     openclaw_env = aws.secretsmanager.Secret(
         make_name("openclaw-env"),
-        name="ocs-automation/openclaw-env",
+        name=f"{PROJECT_NAME}/openclaw-env",
         description="OpenClaw .env file: Anthropic, Slack, GitHub credentials",
-        tags={"Project": "ocs-automation"},
+        tags={"Project": PROJECT_NAME},
     )
 
     # GitHub App private key (PEM, stored separately as it's large)
     github_app_key = aws.secretsmanager.Secret(
         make_name("github-app-key"),
-        name="ocs-automation/github-app-key",
+        name=f"{PROJECT_NAME}/github-app-key",
         description="GitHub App private key PEM for OCS automation",
-        tags={"Project": "ocs-automation"},
+        tags={"Project": PROJECT_NAME},
     )
 
     return {
