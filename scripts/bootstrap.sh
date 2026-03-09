@@ -69,13 +69,18 @@ mkdir -p /data/artifacts
 chmod 755 /data
 
 # Clone ocs-automation repo
-git clone https://github.com/dimagi/ocs-automation.git /opt/ocs-automation || true
+if [ ! -d /opt/ocs-automation/.git ]; then
+    git clone https://github.com/dimagi/ocs-automation.git /opt/ocs-automation
+fi
 
 # Copy OpenClaw config and skills to data volume
 cp -r /opt/ocs-automation/openclaw/. /data/openclaw/
 
 # Pull secrets from Secrets Manager and write .env
-REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region)
+TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+    -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+REGION=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+    http://169.254.169.254/latest/meta-data/placement/region)
 aws secretsmanager get-secret-value \
     --secret-id ocs-automation/openclaw-env \
     --region "$REGION" \

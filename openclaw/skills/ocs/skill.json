@@ -12,7 +12,7 @@
     {
       "type": "slack-mention",
       "pattern": "review #(\\d+)",
-      "action": "review-issue",
+      "action": "pr-review",
       "capture": "issue_number"
     },
     {
