@@ -5,5 +5,7 @@ __pycache__/
 .venv/
 *.egg-info/
 .pulumi/
+# Pulumi stack config files — commit these, they contain non-secret config
+# Pulumi.*.yaml
 *.pyc
 .DS_Store

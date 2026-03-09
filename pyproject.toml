@@ -1,7 +1,7 @@
 [project]
 name = "ocs-automation"
 version = "0.1.0"
-description = "Add your description here"
+description = "OpenClaw EC2 automation instance for open-chat-studio"
 requires-python = ">=3.12"
 dependencies = [
     "pulumi>=3.225.1",
