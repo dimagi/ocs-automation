@@ -1,0 +1,6 @@
+name: ocs-automation
+runtime:
+  name: python
+  options:
+    virtualenv: .venv
+description: OpenClaw EC2 automation instance for open-chat-studio
