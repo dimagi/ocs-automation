@@ -7,17 +7,18 @@ set -euo pipefail
 ACTION="${1:-}"
 TASK_ID="${2:-$(date +%s%N | md5sum | head -c12)}"
 TASK_PROMPT="${3:-}"
-LOCK_FILE="/data/sessions/.lock"
-LOCK_FD=9
-SESSION_DIR="/data/sessions/session-${TASK_ID}"
-COMPOSE_FILE="/opt/ocs-automation/session/docker-compose.yml"
-LOCK_TIMEOUT_MINUTES=90
 
 # --- Input validation ---
 if [[ ! "$TASK_ID" =~ ^[a-zA-Z0-9_-]+$ ]]; then
     echo "ERROR: invalid TASK_ID '$TASK_ID' — must match [a-zA-Z0-9_-]+" >&2
     exit 1
 fi
+
+LOCK_FILE="/data/sessions/.lock"
+LOCK_FD=9
+SESSION_DIR="/data/sessions/session-${TASK_ID}"
+COMPOSE_FILE="/opt/ocs-automation/session/docker-compose.yml"
+LOCK_TIMEOUT_MINUTES=90
 
 # --- Stale lock detection ---
 if [ -f "$LOCK_FILE" ]; then
