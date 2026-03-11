@@ -1,14 +1,18 @@
 #!/bin/bash
 # scripts/deploy.sh
-# Update OpenClaw config and skills on a running EC2 instance.
-# Usage: ./scripts/deploy.sh <instance-id>
+# Update OpenClaw config, skills, Caddy, and session image on a running EC2 instance.
+# Usage: ./scripts/deploy.sh [instance-id]
+#   If instance-id is omitted, auto-resolves from Pulumi stack output.
 set -euo pipefail
 
 INSTANCE_ID="${1:-}"
 if [ -z "$INSTANCE_ID" ]; then
-    echo "Usage: $0 <instance-id>"
-    echo "Get instance ID: pulumi stack output instance_id"
-    exit 1
+    INSTANCE_ID=$(op run --env-file=.pulumi.env -- pulumi stack output instance_id 2>/dev/null) || true
+    if [ -z "$INSTANCE_ID" ]; then
+        echo "Usage: $0 <instance-id>"
+        echo "Get instance ID: pulumi stack output instance_id"
+        exit 1
+    fi
 fi
 
 REGION="${AWS_REGION:-us-east-1}"
@@ -31,13 +35,13 @@ fail()    { echo -e "${PREFIX} ${RED}$*${RESET}" >&2; exit 1; }
 
 info "Deploying to ${BOLD}${INSTANCE_ID}${RESET} in ${BOLD}${REGION}${RESET}"
 
-# Upload openclaw config/skills and session container to S3
+# Upload openclaw config/skills, session container, and scripts to S3
 step "Syncing openclaw/ to S3..."
-aws s3 sync openclaw/ "s3://$BUCKET/openclaw/" --region "$REGION" --quiet
+aws s3 sync openclaw/ "s3://$BUCKET/deploy/openclaw/" --region "$REGION" --quiet
 step "Syncing session/ to S3..."
-aws s3 sync session/ "s3://$BUCKET/session/" --region "$REGION" --quiet
+aws s3 sync session/ "s3://$BUCKET/deploy/session/" --region "$REGION" --quiet
 step "Syncing scripts/ to S3..."
-aws s3 sync scripts/ "s3://$BUCKET/scripts/" --region "$REGION" --quiet
+aws s3 sync scripts/ "s3://$BUCKET/deploy/scripts/" --region "$REGION" --quiet
 success "S3 sync complete"
 
 # Run update commands on the instance via SSM
@@ -46,12 +50,23 @@ COMMAND_ID=$(aws ssm send-command \
     --instance-ids "$INSTANCE_ID" \
     --document-name "AWS-RunShellScript" \
     --region "$REGION" \
+    --timeout-seconds 300 \
     --parameters "commands=[
-        \"aws s3 sync s3://$BUCKET/openclaw/ /data/openclaw/ --region $REGION\",
-        \"aws s3 sync s3://$BUCKET/session/ /opt/ocs-automation/session/ --region $REGION\",
-        \"chmod +x /data/openclaw/skills/ocs/session-manager.sh\",
+        \"set -euo pipefail\",
+        \"echo '>>> Syncing from S3...'\",
+        \"aws s3 sync s3://$BUCKET/deploy/ /opt/ocs-automation/ --delete --region $REGION\",
+        \"echo '>>> Updating skills...'\",
+        \"cp -r /opt/ocs-automation/openclaw/skills/* /opt/openclaw/skills/\",
+        \"echo '>>> Updating Caddyfile...'\",
+        \"cp /opt/ocs-automation/openclaw/Caddyfile /etc/caddy/Caddyfile\",
+        \"DOMAIN=\\$(grep -E '^DOMAIN=' /opt/openclaw/.env | cut -d= -f2)\",
+        \"sed -i \\\"s/__DOMAIN__/\\${DOMAIN}/g\\\" /etc/caddy/Caddyfile\",
+        \"systemctl reload caddy\",
+        \"echo '>>> Rebuilding session image...'\",
         \"docker build -t ocs-session /opt/ocs-automation/session/ 2>&1 | tail -5\",
-        \"cd /data/openclaw && docker compose build && docker compose up -d\"
+        \"echo '>>> Restarting OpenClaw gateway...'\",
+        \"systemctl restart openclaw-gateway\",
+        \"echo '>>> Deploy complete on instance'\"
     ]" \
     --query "Command.CommandId" \
     --output text)
