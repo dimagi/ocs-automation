@@ -6,6 +6,9 @@
 set -euo pipefail
 exec > /var/log/bootstrap.log 2>&1
 
+# cloud-init doesn't set HOME; required by uv and other installers
+export HOME=/root
+
 DOMAIN="__DOMAIN__"
 
 if [ -z "$DOMAIN" ]; then
@@ -53,7 +56,7 @@ npm install -g acpx
 # uv (Python package manager) — pin to specific version for reproducibility
 # Check https://github.com/astral-sh/uv/releases for latest stable
 UV_VERSION="0.6.6"
-HOME=/root curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" | sh
+curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" | sh
 
 # Claude Code CLI
 npm install -g @anthropic-ai/claude-code
