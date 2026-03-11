@@ -53,7 +53,7 @@ npm install -g acpx
 # uv (Python package manager) — pin to specific version for reproducibility
 # Check https://github.com/astral-sh/uv/releases for latest stable
 UV_VERSION="0.6.6"
-curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" | sh
+HOME=/root curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" | sh
 
 # Claude Code CLI
 npm install -g @anthropic-ai/claude-code
