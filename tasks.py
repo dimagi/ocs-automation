@@ -99,10 +99,11 @@ def rebuild(c):
         _success("Instance terminated.")
     else:
         _warn("Instance already gone, skipping wait.")
-    _info("Refreshing Pulumi state...")
-    c.run(f"{OP_PREFIX} pulumi refresh --yes --skip-preview", pty=True)
-    _info("Recreating instance...")
-    c.run(f"{OP_PREFIX} pulumi up --yes --skip-preview", pty=True)
+    _info("Refreshing Pulumi state and recreating instance...")
+    c.run(
+        f'{OP_PREFIX} bash -c "pulumi refresh --yes --skip-preview && pulumi up --yes --skip-preview"',
+        pty=True,
+    )
     _success("Rebuild complete.")
 
 
@@ -130,7 +131,12 @@ def ssh(c):
     """Open an SSM session to the EC2 instance."""
     instance_id = _instance_id(c)
     _info(f"Connecting to {_BOLD}{instance_id}{_RESET}...")
-    c.run(f"aws ssm start-session --target {instance_id} --region {REGION}", pty=True)
+    c.run(
+        f"aws ssm start-session --target {instance_id} --region {REGION}"
+        f" --document-name AWS-StartInteractiveCommand"
+        f" --parameters command='bash -l'",
+        pty=True,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -160,7 +166,7 @@ def health(c):
     """Run the gateway health check."""
     instance_id = _instance_id(c)
     _step("Running health check...")
-    _ssm_run(c, instance_id, 'cd /data/openclaw && docker compose exec openclaw-gateway node dist/index.js health --token "$OPENCLAW_GATEWAY_TOKEN"')
+    _ssm_run(c, instance_id, "cd /data/openclaw && docker compose run --rm openclaw-cli doctor")
 
 
 # ---------------------------------------------------------------------------
@@ -232,7 +238,10 @@ def _ssm_run(c: Context, instance_id: str, command: str):
         warn=True,
     )
     if result.failed:
-        _error("SSM send-command failed")
+        stderr = result.stderr.strip() if result.stderr else ""
+        stdout = result.stdout.strip() if result.stdout else ""
+        detail = stderr or stdout or "(no output)"
+        _error(f"SSM send-command failed: {detail}")
         sys.exit(1)
 
     command_id = result.stdout.strip()

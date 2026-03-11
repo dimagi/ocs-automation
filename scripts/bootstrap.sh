@@ -79,10 +79,11 @@ if [ -n "$DATA_DEVICE" ]; then
     mount -a
 fi
 
-mkdir -p /data/openclaw/config
+mkdir -p /data/openclaw/config/agents/main/sessions
 mkdir -p /data/openclaw/workspace
 mkdir -p /data/sessions
 mkdir -p /data/artifacts
+chmod 700 /data/openclaw/config
 chmod 755 /data
 
 echo "=== Phase 5: Application deployment ==="
@@ -140,7 +141,20 @@ certbot certonly --webroot \
 cp nginx-https.conf nginx.conf
 docker compose exec nginx nginx -s reload
 
-echo "=== Phase 8: Start OpenClaw ==="
+echo "=== Phase 8: Configure and start OpenClaw ==="
+# Set gateway mode so the gateway process starts
+# (openclaw doctor warns if this is unset)
+CONFIG_FILE="/data/openclaw/config/openclaw.json"
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo '{}' > "$CONFIG_FILE"
+fi
+# Merge gateway.mode into existing config
+TMP=$(mktemp)
+jq '.gateway = (.gateway // {}) | .gateway.mode = "local"' "$CONFIG_FILE" > "$TMP" && mv "$TMP" "$CONFIG_FILE"
+
+# Create compile cache dir for NODE_COMPILE_CACHE
+mkdir -p /var/tmp/openclaw-compile-cache
+
 # Build custom openclaw image (adds docker-ce-cli for session-manager.sh)
 docker compose build
 docker compose up -d

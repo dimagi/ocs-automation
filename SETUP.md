@@ -60,7 +60,7 @@ GITHUB_WEBHOOK_SECRET=<from step 1>
 
 # OpenClaw gateway
 OPENCLAW_GATEWAY_TOKEN=<generate: openssl rand -hex 32>
-OPENCLAW_GATEWAY_BIND=all
+OPENCLAW_GATEWAY_BIND=lan
 
 # OpenClaw workspace (static — copy as-is)
 OPENCLAW_WORKSPACE=/home/node/.openclaw/workspace
