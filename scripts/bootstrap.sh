@@ -121,6 +121,9 @@ mkdir -p /var/www/certbot
 # All docker compose commands run from /data/openclaw where .env lives
 cd /data/openclaw
 
+# Phase 5 already substituted the domain into nginx.conf — save it before overwriting
+cp nginx.conf nginx-https.conf
+
 # Start nginx in HTTP-only mode so certbot webroot challenge can complete
 cp /opt/ocs-automation/openclaw/nginx-http.conf nginx.conf
 docker compose up -d nginx
@@ -133,9 +136,8 @@ certbot certonly --webroot \
     --register-unsafely-without-email \
     -d "$DOMAIN"
 
-# Switch to full HTTPS config and reload nginx
-cp /opt/ocs-automation/openclaw/nginx.conf nginx.conf
-sed -i "s/YOUR_DOMAIN/${DOMAIN}/g" nginx.conf
+# Switch to full HTTPS config (already has domain substituted) and reload nginx
+cp nginx-https.conf nginx.conf
 docker compose exec nginx nginx -s reload
 
 echo "=== Phase 8: Start OpenClaw ==="
