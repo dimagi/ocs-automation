@@ -9,7 +9,7 @@ import time
 from invoke import task, Context
 
 REGION = "us-east-1"
-BUCKET = "ocs-automation-artifacts"
+BUCKET = "ocs-automation-prod-artifacts"
 OP_PREFIX = "op run --env-file=.pulumi.env --"
 
 # ANSI color helpers
