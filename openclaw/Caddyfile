@@ -1,0 +1,4 @@
+# Domain is substituted by deploy script
+__DOMAIN__ {
+    reverse_proxy localhost:18789
+}
