@@ -2,11 +2,10 @@
 # Invoke tasks for ocs-automation ops.
 # Usage: uv run inv <task>    or    uv run inv --list
 import json
-import subprocess
 import sys
 import time
 
-from invoke import task, Context
+from invoke import Context, task
 
 REGION = "us-east-1"
 BUCKET = "ocs-automation-prod-artifacts"
@@ -101,7 +100,8 @@ def rebuild(c):
         _warn("Instance already gone, skipping wait.")
     _info("Refreshing Pulumi state and recreating instance...")
     c.run(
-        f'{OP_PREFIX} bash -c "pulumi refresh --yes --skip-preview && pulumi up --yes --skip-preview"',
+        f"{OP_PREFIX} bash -c"
+        f' "pulumi refresh --yes --skip-preview && pulumi up --yes --skip-preview"',
         pty=True,
     )
     _success("Rebuild complete.")
@@ -146,19 +146,26 @@ def ssh(c):
 
 @task(help={"follow": "Tail logs continuously", "lines": "Number of lines to show"})
 def logs(c, follow=False, lines=100):
-    """Show openclaw-gateway container logs via SSM."""
+    """Show openclaw-gateway logs via SSM."""
     instance_id = _instance_id(c)
-    tail = "-f" if follow else f"--tail {lines}"
+    tail = "-f" if follow else f"-n {lines}"
     _step("Fetching gateway logs...")
-    _ssm_run(c, instance_id, f"cd /data/openclaw && docker compose logs {tail} openclaw-gateway")
+    _ssm_run(c, instance_id, f"journalctl -u openclaw-gateway {tail} --no-pager")
 
 
 @task
 def status(c):
-    """Show container status on the EC2 instance."""
+    """Show service and session status on the EC2 instance."""
     instance_id = _instance_id(c)
-    _step("Fetching container status...")
-    _ssm_run(c, instance_id, "cd /data/openclaw && docker compose ps && echo '---' && docker ps --filter name=session --format 'table {{{{.Names}}}}\\t{{{{.Status}}}}\\t{{{{.RunningFor}}}}'")
+    _step("Fetching status...")
+    _ssm_run(
+        c,
+        instance_id,
+        "systemctl status openclaw-gateway caddy postgresql --no-pager -l 2>/dev/null; "
+        "echo '--- Sessions ---'; "
+        "docker ps --filter name=session"
+        " --format 'table {{{{.Names}}}}\\t{{{{.Status}}}}\\t{{{{.RunningFor}}}}'",
+    )
 
 
 @task
@@ -166,7 +173,7 @@ def health(c):
     """Run the gateway health check."""
     instance_id = _instance_id(c)
     _step("Running health check...")
-    _ssm_run(c, instance_id, "cd /data/openclaw && docker compose run --rm openclaw-cli doctor")
+    _ssm_run(c, instance_id, "openclaw doctor")
 
 
 # ---------------------------------------------------------------------------
@@ -178,10 +185,10 @@ def health(c):
 def push_secrets(c, env_file=".env.prod"):
     """Upload .env.prod to AWS Secrets Manager."""
     c.run(
-        f'aws secretsmanager put-secret-value'
-        f' --secret-id ocs-automation/openclaw-env'
+        f"aws secretsmanager put-secret-value"
+        f" --secret-id ocs-automation/openclaw-env"
         f' --secret-string "$(cat {env_file})"'
-        f' --region {REGION}',
+        f" --region {REGION}",
         pty=True,
     )
     _success(f"Secrets updated from {env_file}")
@@ -191,13 +198,36 @@ def push_secrets(c, env_file=".env.prod"):
 def push_github_key(c, pem_file):
     """Upload GitHub App private key to AWS Secrets Manager."""
     c.run(
-        f'aws secretsmanager put-secret-value'
-        f' --secret-id ocs-automation/github-app-key'
+        f"aws secretsmanager put-secret-value"
+        f" --secret-id ocs-automation/github-app-key"
         f' --secret-string "$(cat {pem_file})"'
-        f' --region {REGION}',
+        f" --region {REGION}",
         pty=True,
     )
     _success(f"GitHub App key updated from {pem_file}")
+
+
+# ---------------------------------------------------------------------------
+# Backup / Restore
+# ---------------------------------------------------------------------------
+
+
+@task
+def backup(c):
+    """Trigger S3 backup on the instance."""
+    instance_id = _instance_id(c)
+    _step("Running backup...")
+    _ssm_run(c, instance_id, "/opt/ocs-automation/scripts/backup-to-s3.sh")
+    _success("Backup complete.")
+
+
+@task(help={"timestamp": "Backup timestamp to restore (default: latest)"})
+def restore(c, timestamp="latest"):
+    """Restore from S3 backup."""
+    instance_id = _instance_id(c)
+    _step(f"Restoring from backup ({timestamp})...")
+    _ssm_run(c, instance_id, f"/opt/ocs-automation/scripts/restore-from-s3.sh backups/{timestamp}")
+    _success("Restore complete.")
 
 
 # ---------------------------------------------------------------------------
