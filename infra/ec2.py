@@ -46,7 +46,7 @@ def create_instance(
         iam_instance_profile=instance_profile_name,
         vpc_security_group_ids=[security_group_id],
         user_data=user_data,
-        user_data_replace_on_change=False,  # Intentional: bootstrap runs once at first boot only
+        user_data_replace_on_change=True,  # Bootstrap is idempotent — safe to re-run
         root_block_device=aws.ec2.InstanceRootBlockDeviceArgs(
             volume_size=150,
             volume_type="gp3",
