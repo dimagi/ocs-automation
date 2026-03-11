@@ -112,17 +112,24 @@ op run --env-file=.pulumi.env -- pulumi config set aws:region us-east-1
 
 All subsequent Pulumi commands use the same `op run --env-file=.pulumi.env --` prefix — this injects `PULUMI_CONFIG_PASSPHRASE` from 1Password automatically. The S3 backend URL is already set in `Pulumi.yaml`.
 
-### 8. Deploy infrastructure
+### 8. Deploy infrastructure (first pass — no EC2 yet)
+
+Run `pulumi up` once to create everything except the EC2 instance won't fully bootstrap yet — we need secrets and DNS in place first:
 
 ```bash
 op run --env-file=.pulumi.env -- pulumi up
 ```
 
-This provisions an EC2 instance, EBS data volume, EIP, IAM role, S3 artifacts bucket, and Secrets Manager entries. The EC2 instance bootstraps itself on first boot (installs Docker, Node, OpenClaw, etc.).
+Note the outputs:
+
+```bash
+op run --env-file=.pulumi.env -- pulumi stack output
+# instance_id, public_ip, etc.
+```
 
 ### 9. Set secrets in AWS
 
-Pulumi creates empty Secrets Manager entries. Populate them after the first deploy:
+Bootstrap fetches these during first boot — they must exist before the instance can complete setup:
 
 ```bash
 # OpenClaw .env file
@@ -138,14 +145,18 @@ aws secretsmanager put-secret-value \
     --region us-east-1
 ```
 
-### 10. DNS and TLS
+### 10. Point DNS and wait for bootstrap
+
+Point your DNS A record for `agent.example.com` at the `public_ip` output. Bootstrap must be able to reach Let's Encrypt to get a TLS certificate — **DNS must be live before bootstrap runs certbot**.
+
+Bootstrap runs automatically on first boot and takes ~5 minutes. Watch progress via:
 
 ```bash
-op run --env-file=.pulumi.env -- pulumi stack output
-# Note the public_ip
+aws ssm start-session --target <instance-id> --region us-east-1
+sudo tail -f /var/log/bootstrap.log
 ```
 
-Point your DNS A record for `agent.example.com` at the `public_ip`. Bootstrap handles TLS automatically — certbot runs in standalone mode (port 80) before Docker starts, and the Docker nginx container reads the resulting certs from `/etc/letsencrypt`.
+Bootstrap completes TLS (certbot webroot via Docker nginx) and starts all services automatically. No manual certbot step needed.
 
 ## Updating Config / Skills
 
