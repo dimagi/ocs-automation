@@ -32,8 +32,8 @@ COMMAND_ID=$(aws ssm send-command \
         \"aws s3 sync s3://$BUCKET/openclaw/ /data/openclaw/ --region $REGION\",
         \"aws s3 sync s3://$BUCKET/session/ /opt/ocs-automation/session/ --region $REGION\",
         \"chmod +x /data/openclaw/skills/ocs/session-manager.sh\",
-        \"cd /opt/ocs-automation/openclaw && docker compose pull && docker compose up -d\",
-        \"docker build -t ocs-session /opt/ocs-automation/session/ 2>&1 | tail -5\"
+        \"docker build -t ocs-session /opt/ocs-automation/session/ 2>&1 | tail -5\",
+        \"cd /data/openclaw && docker compose build && docker compose up -d\"
     ]" \
     --query "Command.CommandId" \
     --output text)

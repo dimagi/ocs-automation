@@ -58,9 +58,13 @@ GITHUB_APP_INSTALLATION_ID=789012        # from the URL after installing the app
 GITHUB_APP_PRIVATE_KEY_PATH=/home/node/.openclaw/github-app.pem
 GITHUB_WEBHOOK_SECRET=<from step 1>
 
+# OpenClaw gateway
+OPENCLAW_GATEWAY_TOKEN=<generate: openssl rand -hex 32>
+OPENCLAW_GATEWAY_BIND=all
+
 # OpenClaw workspace (static — copy as-is)
-OPENCLAW_WORKSPACE=/home/node/openclaw/workspace
-SESSION_MANAGER_SCRIPT=/home/node/openclaw/workspace/skills/ocs/session-manager.sh
+OPENCLAW_WORKSPACE=/home/node/.openclaw/workspace
+SESSION_MANAGER_SCRIPT=/home/node/.openclaw/workspace/skills/ocs/session-manager.sh
 ```
 
 ### 4. Create the Pulumi state bucket
@@ -163,3 +167,52 @@ After the initial deploy, use the deploy script to push changes to a running ins
 ```
 
 This syncs `openclaw/`, `session/`, and `scripts/` to S3, then applies the changes via SSM Run Command.
+
+## Monitoring
+
+SSH into the instance via SSM:
+
+```bash
+aws ssm start-session --target <instance-id> --region <region>
+cd /data/openclaw
+```
+
+**Container status:**
+```bash
+docker compose ps
+```
+
+**Gateway logs (live):**
+```bash
+docker compose logs -f openclaw-gateway
+```
+
+**Health check:**
+```bash
+docker compose exec openclaw-gateway node dist/index.js health --token "$OPENCLAW_GATEWAY_TOKEN"
+```
+
+**Session containers** (ephemeral, spun up per task):
+```bash
+docker ps --filter name=session
+```
+
+## Administration (CLI)
+
+Use `openclaw-cli` to administer the running gateway:
+
+```bash
+cd /data/openclaw
+
+# List pending pairing requests
+docker compose run --rm openclaw-cli pairing list
+
+# Approve a pairing request
+docker compose run --rm openclaw-cli pairing approve slack <code>
+
+# Check config
+docker compose run --rm openclaw-cli config get
+
+# Run health/diagnostics
+docker compose run --rm openclaw-cli doctor
+```

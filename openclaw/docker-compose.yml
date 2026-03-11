@@ -1,4 +1,20 @@
 # openclaw/docker-compose.yml
+
+x-openclaw-common: &openclaw-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: openclaw-gateway:local
+  init: true
+  env_file:
+    - .env
+  environment: &openclaw-env
+    HOME: /home/node
+    TERM: xterm-256color
+  volumes: &openclaw-volumes
+    - /data/openclaw/config:/home/node/.openclaw
+    - /data/openclaw/workspace:/home/node/.openclaw/workspace
+
 services:
   # Docker socket proxy — allowlists only the API calls OpenClaw needs.
   # SECURITY NOTE: Even with the proxy, openclaw runs as root (user: "0:0") and
@@ -10,12 +26,13 @@ services:
     container_name: openclaw-socket-proxy
     restart: unless-stopped
     environment:
-      # Allow only what OpenClaw needs: list/inspect/create/start/stop containers
+      # Allow only what OpenClaw needs: list/inspect/create/start/stop/remove containers
       CONTAINERS: 1
       POST: 1
+      DELETE: 1
+      NETWORKS: 1
       # Deny everything else
       IMAGES: 0
-      NETWORKS: 0
       VOLUMES: 0
       INFO: 0
       BUILD: 0
@@ -37,34 +54,68 @@ services:
     networks:
       - proxy
 
-  openclaw:
-    image: ghcr.io/openclaw/openclaw:latest
-    container_name: openclaw
+  openclaw-gateway:
+    <<: *openclaw-common
+    container_name: openclaw-gateway
     restart: unless-stopped
-    init: true
-    env_file:
-      - .env
     environment:
-      HOME: /home/node
-      TERM: xterm-256color
+      <<: *openclaw-env
       NODE_ENV: production
       DOCKER_HOST: tcp://socket-proxy:2375
     volumes:
       - /data/openclaw/config:/home/node/.openclaw
-      - /data/openclaw/workspace:/home/node/openclaw/workspace
+      - /data/openclaw/workspace:/home/node/.openclaw/workspace
       - /data/sessions:/data/sessions
+      - /opt/ocs-automation/session:/opt/ocs-automation/session:ro
     ports:
-      - "3000:3000"
+      - "18789:18789"              # Gateway API (proxied via nginx)
+      - "127.0.0.1:18790:18790"    # Admin/pairing (local only — not exposed to internet)
     user: "0:0"
+    command:
+      - node
+      - dist/index.js
+      - gateway
+      - --bind
+      - all
+      - --port
+      - "18789"
     depends_on:
       - socket-proxy
     networks:
       - proxy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:18789/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 20s
+
+  # CLI companion — used for admin commands (pairing, config, etc.)
+  # Not a long-running service; use: docker compose run --rm openclaw-cli <cmd>
+  openclaw-cli:
+    <<: *openclaw-common
+    container_name: openclaw-cli
+    network_mode: "service:openclaw-gateway"
+    cap_drop:
+      - NET_RAW
+      - NET_ADMIN
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      <<: *openclaw-env
+      BROWSER: echo
+    volumes: *openclaw-volumes
+    stdin_open: true
+    tty: true
+    entrypoint:
+      - node
+      - dist/index.js
+    depends_on:
+      - openclaw-gateway
 
   nginx:
     image: nginx:alpine
@@ -78,7 +129,7 @@ services:
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - /var/www/certbot:/var/www/certbot:ro
     depends_on:
-      - openclaw
+      - openclaw-gateway
     networks:
       - proxy
 

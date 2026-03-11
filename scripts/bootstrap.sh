@@ -141,6 +141,8 @@ cp nginx-https.conf nginx.conf
 docker compose exec nginx nginx -s reload
 
 echo "=== Phase 8: Start OpenClaw ==="
+# Build custom openclaw image (adds docker-ce-cli for session-manager.sh)
+docker compose build
 docker compose up -d
 
 echo "=== OpenClaw Bootstrap Complete ==="

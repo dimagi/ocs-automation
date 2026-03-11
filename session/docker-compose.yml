@@ -3,9 +3,7 @@
 # Usage: TASK_ID=<id> POSTGRES_PASSWORD=<pass> docker compose up
 services:
   claude:
-    build:
-      context: /opt/ocs-automation/session
-      dockerfile: Dockerfile
+    image: ocs-session
     container_name: "session-${TASK_ID}"
     environment:
       TASK_ID: "${TASK_ID}"

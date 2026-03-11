@@ -4,6 +4,13 @@
 # Args: <action> <task_id> <prompt>
 set -euo pipefail
 
+# ANTHROPIC_API_KEY is inherited from the gateway container environment.
+# If this check fails, verify the key is set in .env and the gateway's env_file includes it.
+if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
+    echo "ERROR: ANTHROPIC_API_KEY is not set — sessions cannot authenticate" >&2
+    exit 1
+fi
+
 ACTION="${1:-}"
 TASK_ID="${2:-$(date +%s%N | md5sum | head -c12)}"
 TASK_PROMPT="${3:-}"
@@ -45,12 +52,6 @@ mkdir -p "$SESSION_DIR"/{postgres,redis}
 # Write TASK_PROMPT to a file to avoid env var exposure in docker inspect
 printf '%s' "$TASK_PROMPT" > "$SESSION_DIR/task-prompt.txt"
 chmod 600 "$SESSION_DIR/task-prompt.txt"
-
-# --- Load OpenClaw .env for API keys ---
-set -a
-# shellcheck source=/dev/null
-source /data/openclaw/.env
-set +a
 
 # --- Generate random Postgres password for this session ---
 POSTGRES_PASSWORD=$(openssl rand -hex 16)
