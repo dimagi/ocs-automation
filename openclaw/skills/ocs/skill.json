@@ -41,7 +41,6 @@
   ],
   "session": {
     "manager": "./session-manager.sh",
-    "lock_file": "/data/sessions/.lock",
     "timeout_minutes": 60
   }
 }

@@ -1,82 +1,50 @@
 #!/bin/bash
-# openclaw/skills/ocs/session-manager.sh
-# Called by OpenClaw skill to launch a Claude Code session.
-# Args: <action> <task_id> <prompt>
 set -euo pipefail
 
-# ANTHROPIC_API_KEY is inherited from the gateway container environment.
-# If this check fails, verify the key is set in .env and the gateway's env_file includes it.
-if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
-    echo "ERROR: ANTHROPIC_API_KEY is not set — sessions cannot authenticate" >&2
-    exit 1
-fi
+ACTION="${1:?Usage: session-manager.sh <action> <task_id> <prompt>}"
+TASK_ID="${2:?Missing task_id}"
+PROMPT="${3:?Missing prompt}"
 
-ACTION="${1:-}"
-TASK_ID="${2:-$(date +%s%N | md5sum | head -c12)}"
-TASK_PROMPT="${3:-}"
-
-# --- Input validation ---
+# Validate task ID
 if [[ ! "$TASK_ID" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    echo "ERROR: invalid TASK_ID '$TASK_ID' — must match [a-zA-Z0-9_-]+" >&2
+    echo "ERROR: Invalid TASK_ID: $TASK_ID" >&2
     exit 1
 fi
 
-LOCK_FILE="/data/sessions/.lock"
-LOCK_FD=9
 SESSION_DIR="/data/sessions/session-${TASK_ID}"
-COMPOSE_FILE="/opt/ocs-automation/session/docker-compose.yml"
-LOCK_TIMEOUT_MINUTES=90
+mkdir -p "$SESSION_DIR"
 
-# --- Stale lock detection ---
-if [ -f "$LOCK_FILE" ]; then
-    lock_age_minutes=$(( ( $(date +%s) - $(stat -c %Y "$LOCK_FILE") ) / 60 ))
-    if [ "$lock_age_minutes" -ge "$LOCK_TIMEOUT_MINUTES" ]; then
-        echo "[session-manager] Stale lock detected (${lock_age_minutes}m old) — removing" >&2
-        rm -f "$LOCK_FILE"
-    fi
-fi
-
-# --- Atomic lock via flock ---
-eval "exec ${LOCK_FD}>'${LOCK_FILE}'"
-if ! flock -n $LOCK_FD; then
-    RUNNING=$(cat "$LOCK_FILE" 2>/dev/null || echo "unknown")
-    echo "ERROR: Session '$RUNNING' already running. Task '$TASK_ID' rejected." >&2
-    exit 1
-fi
-echo "$TASK_ID" > "$LOCK_FILE"
-trap 'flock -u '"$LOCK_FD"'; rm -f "$LOCK_FILE"' EXIT
-
-# --- Session workspace setup ---
-mkdir -p "$SESSION_DIR"/{postgres,redis}
-
-# Write TASK_PROMPT to a file to avoid env var exposure in docker inspect
-printf '%s' "$TASK_PROMPT" > "$SESSION_DIR/task-prompt.txt"
+# Write task prompt to file (avoid env var exposure in docker inspect)
+echo "$PROMPT" > "$SESSION_DIR/task-prompt.txt"
 chmod 600 "$SESSION_DIR/task-prompt.txt"
 
-# --- Generate random Postgres password for this session ---
-POSTGRES_PASSWORD=$(openssl rand -hex 16)
+# Create session database
+DB_NAME="session_${TASK_ID}"
+createdb -U openclaw "$DB_NAME" 2>/dev/null || echo "Database $DB_NAME already exists"
 
-export TASK_ID
-export POSTGRES_PASSWORD
+# Source environment for API keys
+source /opt/openclaw/.env
 
-echo "[session-manager] Starting session $TASK_ID (action: $ACTION)"
+# Run session container
+docker run --rm \
+    --name "session-${TASK_ID}" \
+    --add-host=host.docker.internal:host-gateway \
+    -e "TASK_ID=${TASK_ID}" \
+    -e "DATABASE_URL=postgresql://openclaw@host.docker.internal:5432/${DB_NAME}" \
+    -e "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" \
+    -e "DJANGO_SETTINGS_MODULE=open_chat_studio.settings" \
+    -e "CACHE_BACKEND=django.core.cache.backends.dummy.DummyCache" \
+    -v "${SESSION_DIR}:/workspace" \
+    ocs-session
 
-# --- Compose helper ---
-run_compose() {
-    COMPOSE_PROJECT_NAME="session-${TASK_ID}" \
-        docker compose -f "$COMPOSE_FILE" "$@"
-}
+EXIT_CODE=$?
 
-# --- Run the session ---
-run_compose up \
-    --exit-code-from claude \
-    --abort-on-container-exit
+# Drop session database
+dropdb -U openclaw "$DB_NAME" 2>/dev/null || echo "Database $DB_NAME already dropped"
 
-# --- Capture output ---
-OUTPUT=$(cat "$SESSION_DIR/output.json" 2>/dev/null || echo '{"error":"no output"}')
+# Report output
+if [ -f "$SESSION_DIR/output.json" ]; then
+    cat "$SESSION_DIR/output.json"
+fi
 
-echo "[session-manager] Session $TASK_ID complete"
-echo "$OUTPUT"
-
-# --- Cleanup containers (keep workspace dir for audit) ---
-run_compose down -v --remove-orphans
+exit $EXIT_CODE
