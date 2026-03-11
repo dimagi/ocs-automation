@@ -26,9 +26,15 @@ clone_or_update "$DOCS_REPO_URL" /workspace/docs
 
 cd /workspace/app
 
-# Wait for Postgres to be ready
-echo "[session:$TASK_ID] Waiting for Postgres..."
-until pg_isready -h db -p 5432 -U postgres; do sleep 1; done
+# Wait for Postgres to be ready (extract host/port from DATABASE_URL)
+if [ -z "${DATABASE_URL:-}" ]; then
+    echo "ERROR: DATABASE_URL is not set" >&2
+    exit 1
+fi
+DB_HOST=$(python3 -c "from urllib.parse import urlparse; print(urlparse('${DATABASE_URL}').hostname)")
+DB_PORT=$(python3 -c "from urllib.parse import urlparse; print(urlparse('${DATABASE_URL}').port or 5432)")
+echo "[session:$TASK_ID] Waiting for Postgres at ${DB_HOST}:${DB_PORT}..."
+until pg_isready -h "$DB_HOST" -p "$DB_PORT"; do sleep 1; done
 
 # Run Django migrations
 uv run python manage.py migrate --noinput
