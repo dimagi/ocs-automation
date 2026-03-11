@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "OpenClaw EC2 automation instance for open-chat-studio"
 requires-python = ">=3.12"
 dependencies = [
+    "invoke>=2.2",
     "pulumi>=3.225.1",
     "pulumi-aws>=7.21.0",
 ]

@@ -12,25 +12,37 @@ Pulumi (Python) infrastructure for OpenClaw — an EC2-hosted Claude Code automa
 
 ## Commands
 
+All ops use `invoke` via `uv run inv <task>`. Run `uv run inv --list` for the full list.
+
 ```bash
-# Infrastructure (state in S3, passphrase in 1Password via .pulumi.env)
-alias p="op run --env-file=.pulumi.env -- pulumi"  # convenience alias
-p up                               # Deploy / update infra
-p stack output                     # Show outputs (instance_id, public_ip, etc.)
-p config set domain <host>         # Required before first deploy
-p config set aws:region ap-southeast-2
+# Infrastructure
+uv run inv up                      # Deploy / update infra (Pulumi)
+uv run inv up --yes                # Skip confirmation
+uv run inv preview                 # Preview changes without applying
+uv run inv outputs                 # Show stack outputs (instance_id, public_ip, etc.)
 
-# Config deploy (update OpenClaw config on running instance)
-./scripts/deploy.sh <instance-id>  # Get instance-id from: pulumi stack output instance_id
+# Config deploy (sync to running instance)
+uv run inv deploy                  # Auto-resolves instance ID from Pulumi
 
-# Set secrets after first deploy (values never in code)
-aws secretsmanager put-secret-value \
-    --secret-id ocs-automation/openclaw-env \
-    --secret-string "$(cat .env.prod)"
+# Remote ops
+uv run inv ssh                     # SSM session to the instance
+uv run inv status                  # Container status + active sessions
+uv run inv logs                    # Gateway logs (last 100 lines)
+uv run inv logs --follow           # Tail logs
+uv run inv health                  # Gateway health check
+
+# Secrets
+uv run inv push-secrets            # Upload .env.prod to Secrets Manager
+uv run inv push-github-key --pem-file=key.pem
 
 # Lint
-uv run ruff check .
-uv run ruff format .
+uv run inv lint                    # Check only
+uv run inv fmt                     # Auto-fix + format
+```
+
+Raw Pulumi commands still work with the 1Password prefix:
+```bash
+op run --env-file=.pulumi.env -- pulumi config set domain <host>
 ```
 
 ## Key Files
