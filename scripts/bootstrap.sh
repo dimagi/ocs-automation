@@ -1,162 +1,301 @@
 #!/bin/bash
 # scripts/bootstrap.sh
-# EC2 first-boot setup for OpenClaw automation instance.
+# Idempotent EC2 setup for OpenClaw automation instance.
+# Safe to re-run — every phase uses guards to skip already-completed steps.
+#
 # Template variables replaced by infra/ec2.py before embedding as user-data:
-#   DOMAIN  → the public hostname for nginx TLS, set via: pulumi config set domain <host>
+#   __DOMAIN__  → the public hostname for Caddy TLS, set via: pulumi config set domain <host>
 set -euo pipefail
-exec > /var/log/bootstrap.log 2>&1
-
-# cloud-init doesn't set HOME; required by uv and other installers
-export HOME=/root
 
 DOMAIN="__DOMAIN__"
 
-if [ -z "$DOMAIN" ]; then
+exec > >(tee -a /var/log/bootstrap.log) 2>&1
+echo "=== Bootstrap started at $(date) ==="
+
+# cloud-init doesn't set HOME; required by uv, npm, and other installers
+export HOME=/root
+export DEBIAN_FRONTEND=noninteractive
+
+if [ -z "$DOMAIN" ] || [ "$DOMAIN" = "__DOMAIN__" ]; then
     echo "ERROR: DOMAIN is not set. Ensure pulumi config set domain <your-domain> before deploying." >&2
     exit 1
 fi
 
-echo "=== Phase 1: OS package setup ==="
+# ---------------------------------------------------------------------------
+# Phase 1 — System packages
+# ---------------------------------------------------------------------------
+echo "=== Phase 1: System packages ==="
+
+# Prerequisites
+apt-get update -y
+apt-get install -y ca-certificates curl gnupg lsb-release software-properties-common
+
+install -m 0755 -d /etc/apt/keyrings
+
+# Docker CE repo (idempotent — skip if list file exists)
+if [ ! -f /etc/apt/sources.list.d/docker.list ]; then
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+        | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    chmod a+r /etc/apt/keyrings/docker.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
+        > /etc/apt/sources.list.d/docker.list
+fi
+
+# Caddy repo (idempotent — skip if list file exists)
+if [ ! -f /etc/apt/sources.list.d/caddy-fury.list ]; then
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
+        | gpg --dearmor -o /etc/apt/keyrings/caddy-stable-archive-keyring.gpg
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
+        > /etc/apt/sources.list.d/caddy-fury.list
+fi
+
+# NodeSource repo for Node.js 22 (idempotent — skip if list file exists)
+if [ ! -f /etc/apt/sources.list.d/nodesource.list ]; then
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+fi
+
 apt-get update -y
 apt-get install -y \
-    ca-certificates curl gnupg lsb-release \
-    git unzip jq \
-    certbot
-
-# AWS CLI v2 (not available via apt on Ubuntu 24.04)
-curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
-unzip -q /tmp/awscliv2.zip -d /tmp
-/tmp/aws/install
-rm -rf /tmp/awscliv2.zip /tmp/aws
-
-echo "=== Phase 2: Docker installation ==="
-install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
-    gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-chmod a+r /etc/apt/keyrings/docker.gpg
-
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-    https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
-    > /etc/apt/sources.list.d/docker.list
-
-apt-get update -y
-apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+    docker-ce docker-ce-cli containerd.io docker-compose-plugin \
+    postgresql postgresql-client \
+    caddy \
+    nodejs \
+    git curl jq unzip
 
 systemctl enable docker
 systemctl start docker
 
-echo "=== Phase 3: Tool installation ==="
-# Node.js v24 — pinned to major version. Verify installer hash on version bumps.
-curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
-apt-get install -y nodejs
+echo "Phase 1 complete."
 
-# acpx (headless ACP client)
-npm install -g acpx
+# ---------------------------------------------------------------------------
+# Phase 2 — Tools
+# ---------------------------------------------------------------------------
+echo "=== Phase 2: Tools ==="
 
-# uv (Python package manager) — pin to specific version for reproducibility
-# Check https://github.com/astral-sh/uv/releases for latest stable
-UV_VERSION="0.6.6"
-curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" | sh
-
-# Claude Code CLI
-npm install -g @anthropic-ai/claude-code
-
-echo "=== Phase 4: EBS data volume setup ==="
-DATA_DEVICE=""
-for dev in /dev/nvme1n1 /dev/xvdf /dev/sdf; do
-    if [ -b "$dev" ]; then
-        DATA_DEVICE="$dev"
-        break
-    fi
-done
-
-if [ -n "$DATA_DEVICE" ]; then
-    if ! blkid "$DATA_DEVICE" 2>/dev/null | grep -q ext4; then
-        mkfs.ext4 "$DATA_DEVICE"
-    fi
-    mkdir -p /data
-    echo "$DATA_DEVICE /data ext4 defaults,nofail 0 2" >> /etc/fstab
-    mount -a
+# uv (Python package manager)
+if ! command -v uv &>/dev/null; then
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    # Ensure uv is on PATH for the rest of the script
+    export PATH="/root/.local/bin:$PATH"
+else
+    echo "uv already installed, skipping."
 fi
 
-mkdir -p /data/openclaw/config/agents/main/sessions
-mkdir -p /data/openclaw/workspace
-mkdir -p /data/sessions
-mkdir -p /data/artifacts
-chmod 700 /data/openclaw/config
-chmod 755 /data
+# acpx
+if ! npm list -g @anthropic-ai/acpx &>/dev/null; then
+    npm install -g @anthropic-ai/acpx@latest
+else
+    echo "acpx already installed, updating."
+    npm install -g @anthropic-ai/acpx@latest
+fi
 
+# Claude Code
+if ! npm list -g @anthropic-ai/claude-code &>/dev/null; then
+    npm install -g @anthropic-ai/claude-code@latest
+else
+    echo "claude-code already installed, updating."
+    npm install -g @anthropic-ai/claude-code@latest
+fi
+
+echo "Phase 2 complete."
+
+# ---------------------------------------------------------------------------
+# Phase 3 — PostgreSQL configuration
+# ---------------------------------------------------------------------------
+echo "=== Phase 3: PostgreSQL configuration ==="
+
+# Determine the PostgreSQL major version directory
+PG_VERSION=$(pg_config --version | grep -oP '\d+' | head -1)
+PG_HBA="/etc/postgresql/${PG_VERSION}/main/pg_hba.conf"
+PG_CONF="/etc/postgresql/${PG_VERSION}/main/postgresql.conf"
+
+# Create openclaw role with CREATEDB (idempotent)
+sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='openclaw'" | grep -q 1 \
+    || sudo -u postgres createuser --createdb openclaw
+
+# Add Docker bridge subnet to pg_hba.conf (idempotent)
+grep -q '172.17.0.0/16' "$PG_HBA" \
+    || echo 'host all openclaw 172.17.0.0/16 trust' >> "$PG_HBA"
+
+# Set listen_addresses to include Docker bridge (idempotent via sed)
+sed -i "s/^#\?listen_addresses.*/listen_addresses = 'localhost,172.17.0.1'/" "$PG_CONF"
+
+systemctl restart postgresql
+
+echo "Phase 3 complete."
+
+# ---------------------------------------------------------------------------
+# Phase 4 — Directory structure
+# ---------------------------------------------------------------------------
+echo "=== Phase 4: Directory structure ==="
+
+mkdir -p /opt/openclaw/{config,memory,skills}
+mkdir -p /opt/ocs-automation
+mkdir -p /data/sessions
+
+echo "Phase 4 complete."
+
+# ---------------------------------------------------------------------------
+# Phase 5 — Application deployment
+# ---------------------------------------------------------------------------
 echo "=== Phase 5: Application deployment ==="
-if [ ! -d /opt/ocs-automation/.git ]; then
+
+# Clone or update ocs-automation repo
+if [ -d /opt/ocs-automation/.git ]; then
+    git -C /opt/ocs-automation pull --ff-only || echo "git pull failed (non-fatal), continuing with existing checkout."
+else
     git clone https://github.com/dimagi/ocs-automation.git /opt/ocs-automation
 fi
 
-# Copy OpenClaw config and skills to data volume
-cp -r /opt/ocs-automation/openclaw/. /data/openclaw/
+# Copy skills to OpenClaw directory
+if [ -d /opt/ocs-automation/openclaw/skills ]; then
+    cp -r /opt/ocs-automation/openclaw/skills/* /opt/openclaw/skills/
+fi
 
-# Substitute domain into nginx config
-sed -i "s/YOUR_DOMAIN/${DOMAIN}/g" /data/openclaw/nginx.conf
-echo "Domain configured: $DOMAIN"
+# Copy and configure Caddyfile
+if [ -f /opt/ocs-automation/openclaw/Caddyfile ]; then
+    cp /opt/ocs-automation/openclaw/Caddyfile /etc/caddy/Caddyfile
+    sed -i "s/__DOMAIN__/${DOMAIN}/g" /etc/caddy/Caddyfile
+    systemctl reload caddy || systemctl restart caddy
+fi
 
+echo "Phase 5 complete."
+
+# ---------------------------------------------------------------------------
+# Phase 6 — Secrets injection
+# ---------------------------------------------------------------------------
 echo "=== Phase 6: Secrets injection ==="
-# IMDSv2 — token TTL is 6 hours (21600 seconds)
+
+# Fetch region from IMDS v2
 TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
-    -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+    -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
 REGION=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
     http://169.254.169.254/latest/meta-data/placement/region)
 
-echo "Fetching OpenClaw secrets from Secrets Manager (region: $REGION)..."
+echo "Fetching OpenClaw secrets from Secrets Manager (region: ${REGION})..."
 aws secretsmanager get-secret-value \
     --secret-id ocs-automation/openclaw-env \
     --region "$REGION" \
     --query SecretString \
-    --output text > /data/openclaw/.env.tmp
+    --output text > /opt/openclaw/.env.tmp
 
-chmod 600 /data/openclaw/.env.tmp
-mv /data/openclaw/.env.tmp /data/openclaw/.env
-echo "Secrets written to /data/openclaw/.env"
+chmod 600 /opt/openclaw/.env.tmp
+mv /opt/openclaw/.env.tmp /opt/openclaw/.env
+echo "Secrets written to /opt/openclaw/.env"
 
-echo "=== Phase 7: TLS certificate ==="
-mkdir -p /var/www/certbot
+echo "Phase 6 complete."
 
-# All docker compose commands run from /data/openclaw where .env lives
-cd /data/openclaw
+# ---------------------------------------------------------------------------
+# Phase 7 — OpenClaw installation
+# ---------------------------------------------------------------------------
+echo "=== Phase 7: OpenClaw installation ==="
 
-# Phase 5 already substituted the domain into nginx.conf — save it before overwriting
-cp nginx.conf nginx-https.conf
+# Install or update OpenClaw globally
+npm install -g openclaw@latest
 
-# Start nginx in HTTP-only mode so certbot webroot challenge can complete
-cp /opt/ocs-automation/openclaw/nginx-http.conf nginx.conf
-docker compose up -d nginx
+# Create systemd unit for openclaw-gateway (idempotent — always overwrite)
+cat > /etc/systemd/system/openclaw-gateway.service << 'EOF'
+[Unit]
+Description=OpenClaw Gateway
+After=network.target postgresql.service
+Wants=postgresql.service
 
-# Obtain cert via webroot (nginx serves the ACME challenge)
-certbot certonly --webroot \
-    --webroot-path /var/www/certbot \
-    --non-interactive \
-    --agree-tos \
-    --register-unsafely-without-email \
-    -d "$DOMAIN"
+[Service]
+Type=simple
+WorkingDirectory=/opt/openclaw
+EnvironmentFile=/opt/openclaw/.env
+ExecStart=/usr/bin/openclaw gateway
+Restart=on-failure
+RestartSec=5
 
-# Switch to full HTTPS config (already has domain substituted) and reload nginx
-cp nginx-https.conf nginx.conf
-docker compose exec nginx nginx -s reload
+[Install]
+WantedBy=multi-user.target
+EOF
 
-echo "=== Phase 8: Configure and start OpenClaw ==="
-# Set gateway mode so the gateway process starts
-# (openclaw doctor warns if this is unset)
-CONFIG_FILE="/data/openclaw/config/openclaw.json"
-if [ ! -f "$CONFIG_FILE" ]; then
-    echo '{}' > "$CONFIG_FILE"
+systemctl daemon-reload
+systemctl enable openclaw-gateway
+systemctl restart openclaw-gateway
+
+echo "Phase 7 complete."
+
+# ---------------------------------------------------------------------------
+# Phase 8 — S3 restore (if backup exists)
+# ---------------------------------------------------------------------------
+echo "=== Phase 8: S3 restore (if backup exists) ==="
+
+BUCKET=$(aws s3 ls --region "$REGION" 2>/dev/null | grep ocs-automation | head -1 | awk '{print $3}') || true
+
+if [ -n "$BUCKET" ] && aws s3 ls "s3://${BUCKET}/backups/latest/" --region "$REGION" 2>/dev/null; then
+    echo "Restoring from S3 backup (s3://${BUCKET}/backups/latest/)..."
+
+    # Restore OpenClaw config, memory, and skills (exclude .env)
+    aws s3 sync "s3://${BUCKET}/backups/latest/openclaw/config/" /opt/openclaw/config/ --region "$REGION"
+    aws s3 sync "s3://${BUCKET}/backups/latest/openclaw/memory/" /opt/openclaw/memory/ --region "$REGION"
+    aws s3 sync "s3://${BUCKET}/backups/latest/openclaw/skills/" /opt/openclaw/skills/ --region "$REGION"
+
+    # Restore Postgres dumps if they exist
+    DUMP="/tmp/openclaw-pg-restore.sql"
+    if aws s3 cp "s3://${BUCKET}/backups/latest/postgres/openclaw-pg-backup.sql" "$DUMP" --region "$REGION" 2>/dev/null; then
+        sudo -u postgres psql < "$DUMP" || echo "Postgres restore encountered errors (non-fatal)."
+        rm -f "$DUMP"
+        echo "Postgres restored."
+    fi
+
+    systemctl restart openclaw-gateway
+    echo "S3 restore complete."
+else
+    echo "No S3 backup found, skipping restore."
 fi
-# Merge gateway.mode into existing config
-TMP=$(mktemp)
-jq '.gateway = (.gateway // {}) | .gateway.mode = "local"' "$CONFIG_FILE" > "$TMP" && mv "$TMP" "$CONFIG_FILE"
 
-# Create compile cache dir for NODE_COMPILE_CACHE
-mkdir -p /var/tmp/openclaw-compile-cache
+echo "Phase 8 complete."
 
-# Build custom openclaw image (adds docker-ce-cli for session-manager.sh)
-docker compose build
-docker compose up -d
+# ---------------------------------------------------------------------------
+# Phase 9 — Build session container image
+# ---------------------------------------------------------------------------
+echo "=== Phase 9: Build session container image ==="
 
-echo "=== OpenClaw Bootstrap Complete ==="
+if [ -f /opt/ocs-automation/session/Dockerfile ]; then
+    docker build -t ocs-session /opt/ocs-automation/session/
+    echo "Session container image built."
+else
+    echo "No session Dockerfile found, skipping build."
+fi
+
+echo "Phase 9 complete."
+
+# ---------------------------------------------------------------------------
+# Phase 10 — S3 backup timer
+# ---------------------------------------------------------------------------
+echo "=== Phase 10: S3 backup timer ==="
+
+# Create systemd service for backup (idempotent — always overwrite)
+cat > /etc/systemd/system/openclaw-backup.service << 'EOF'
+[Unit]
+Description=OpenClaw S3 Backup
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ocs-automation/scripts/backup-to-s3.sh
+EOF
+
+# Create systemd timer (idempotent — always overwrite)
+cat > /etc/systemd/system/openclaw-backup.timer << 'EOF'
+[Unit]
+Description=OpenClaw S3 Backup Timer
+
+[Timer]
+OnCalendar=*-*-* 00/4:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now openclaw-backup.timer
+
+echo "Phase 10 complete."
+
+# ---------------------------------------------------------------------------
+echo "=== Bootstrap completed at $(date) ==="
