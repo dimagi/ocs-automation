@@ -36,7 +36,6 @@ resources = create_instance(
 # Outputs
 pulumi.export("instance_id", resources["instance"].id)
 pulumi.export("public_ip", resources["eip"].public_ip)
-pulumi.export("data_volume_id", resources["data_volume"].id)
 pulumi.export("artifacts_bucket_name", bucket.bucket)
 pulumi.export("openclaw_env_secret_arn", secrets["openclaw_env"].arn)
 pulumi.export("github_app_key_secret_arn", secrets["github_app_key"].arn)
