@@ -4,3 +4,5 @@ runtime:
   options:
     virtualenv: .venv
 description: OpenClaw EC2 automation instance for open-chat-studio
+backend:
+  url: s3://ocs-automation-pulumi-state  # set via PULUMI_BACKEND_URL in .pulumi.env

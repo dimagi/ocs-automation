@@ -78,6 +78,8 @@ services:
       - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - openclaw
+    networks:
+      - proxy
 
 networks:
   proxy:

@@ -1,0 +1,4 @@
+encryptionsalt: v1:B7ArjspvW1c=:v1:JpyHpEV7cC85UZNr:6PbPCb6wzIjcV4hTAs8I3T1Mn2/qBA==
+config:
+  ocs-automation:domain: agent.openchatstudio.com
+  aws:region: us-east-1

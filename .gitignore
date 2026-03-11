@@ -1,6 +1,8 @@
 .env
 .env.*
 !.env.example
+*.pem
+.claude/
 __pycache__/
 .venv/
 *.egg-info/

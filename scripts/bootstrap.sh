@@ -2,13 +2,13 @@
 # scripts/bootstrap.sh
 # EC2 first-boot setup for OpenClaw automation instance.
 # Template variables replaced by infra/ec2.py before embedding as user-data:
-#   __DOMAIN__  → the public hostname for nginx TLS (e.g. openclaw.example.com)
+#   DOMAIN  → the public hostname for nginx TLS, set via: pulumi config set domain <host>
 set -euo pipefail
 exec > /var/log/bootstrap.log 2>&1
 
 DOMAIN="__DOMAIN__"
 
-if [ -z "$DOMAIN" ] || [ "$DOMAIN" = "__DOMAIN__" ]; then
+if [ -z "$DOMAIN" ]; then
     echo "ERROR: DOMAIN is not set. Ensure pulumi config set domain <your-domain> before deploying." >&2
     exit 1
 fi
@@ -17,8 +17,14 @@ echo "=== Phase 1: OS package setup ==="
 apt-get update -y
 apt-get install -y \
     ca-certificates curl gnupg lsb-release \
-    git unzip jq awscli \
-    nginx certbot python3-certbot-nginx
+    git unzip jq \
+    certbot
+
+# AWS CLI v2 (not available via apt on Ubuntu 24.04)
+curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+unzip -q /tmp/awscliv2.zip -d /tmp
+/tmp/aws/install
+rm -rf /tmp/awscliv2.zip /tmp/aws
 
 echo "=== Phase 2: Docker installation ==="
 install -m 0755 -d /etc/apt/keyrings
@@ -106,7 +112,15 @@ chmod 600 /data/openclaw/.env.tmp
 mv /data/openclaw/.env.tmp /data/openclaw/.env
 echo "Secrets written to /data/openclaw/.env"
 
-echo "=== Phase 7: Start OpenClaw ==="
+echo "=== Phase 7: TLS certificate ==="
+# Obtain cert before starting Docker (certbot standalone needs port 80 free)
+certbot certonly --standalone \
+    --non-interactive \
+    --agree-tos \
+    --register-unsafely-without-email \
+    -d "$DOMAIN"
+
+echo "=== Phase 8: Start OpenClaw ==="
 cd /opt/ocs-automation/openclaw
 docker compose up -d
 
