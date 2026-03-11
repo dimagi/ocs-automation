@@ -14,7 +14,15 @@ def create_security_group(vpc_id: str) -> aws.ec2.SecurityGroup:
         vpc_id=vpc_id,
         description="OpenClaw automation instance",
         ingress=[
-            # HTTPS for Slack/GitHub webhooks
+            # HTTP — required for certbot ACME challenge and redirect to HTTPS
+            aws.ec2.SecurityGroupIngressArgs(
+                protocol="tcp",
+                from_port=80,
+                to_port=80,
+                cidr_blocks=["0.0.0.0/0"],
+                description="HTTP for ACME challenge and redirect",
+            ),
+            # HTTPS for Slack/GitHub webhooks and web traffic
             aws.ec2.SecurityGroupIngressArgs(
                 protocol="tcp",
                 from_port=443,

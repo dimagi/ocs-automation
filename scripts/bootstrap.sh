@@ -113,15 +113,29 @@ mv /data/openclaw/.env.tmp /data/openclaw/.env
 echo "Secrets written to /data/openclaw/.env"
 
 echo "=== Phase 7: TLS certificate ==="
-# Obtain cert before starting Docker (certbot standalone needs port 80 free)
-certbot certonly --standalone \
+mkdir -p /var/www/certbot
+
+# Start nginx in HTTP-only mode so certbot webroot challenge can complete
+cd /opt/ocs-automation/openclaw
+cp nginx-http.conf /data/openclaw/nginx.conf
+docker compose up -d nginx
+
+# Obtain cert via webroot (nginx serves the ACME challenge)
+certbot certonly --webroot \
+    --webroot-path /var/www/certbot \
     --non-interactive \
     --agree-tos \
     --register-unsafely-without-email \
     -d "$DOMAIN"
 
+# Switch nginx to full HTTPS config and start remaining services
+sed -i "s/YOUR_DOMAIN/${DOMAIN}/g" /data/openclaw/nginx.conf
+# nginx.conf (with SSL) was already substituted in Phase 5 — copy it back
+cp /opt/ocs-automation/openclaw/nginx.conf /data/openclaw/nginx.conf
+sed -i "s/YOUR_DOMAIN/${DOMAIN}/g" /data/openclaw/nginx.conf
+docker compose exec nginx nginx -s reload
+
 echo "=== Phase 8: Start OpenClaw ==="
-cd /opt/ocs-automation/openclaw
 docker compose up -d
 
 echo "=== OpenClaw Bootstrap Complete ==="
