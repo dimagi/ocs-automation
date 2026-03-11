@@ -9,23 +9,23 @@ OpenClaw listens for Slack mentions and GitHub webhooks, then spins up ephemeral
 ```
 Pulumi (infra/)
   └── EC2 instance (Ubuntu 24.04)
-        └── Docker Compose (openclaw/)
-              ├── openclaw        ← webhook receiver, task orchestrator
-              ├── nginx           ← TLS termination
-              └── socket-proxy    ← Docker API allowlist
-                    └── Session containers (session/)
-                          └── acpx → Claude Code → open-chat-studio repo
+        ├── OpenClaw          ← webhook receiver, task orchestrator (systemd)
+        ├── PostgreSQL 16     ← shared database (systemd)
+        ├── Caddy             ← reverse proxy, automatic TLS (systemd)
+        └── Docker
+              └── Session containers (session/)
+                    └── acpx → Claude Code → open-chat-studio repo
 ```
 
 ## Directory Structure
 
 ```
 infra/          Pulumi resource definitions (EC2, IAM, S3, secrets)
-openclaw/       OpenClaw Docker Compose config, nginx, skills
+openclaw/       Caddyfile, skills, config (deployed to /opt/openclaw/)
   skills/ocs/   OpenClaw skill: Slack/GitHub triggers, session-manager.sh
-scripts/        bootstrap.sh (first boot), deploy.sh (ongoing updates)
+scripts/        bootstrap.sh (idempotent), deploy.sh, backup/restore
 session/        Session container Dockerfile and entrypoint
-docs/           Plans and prompts
+docs/           Plans and specs
 ```
 
 ## Setup

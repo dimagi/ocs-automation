@@ -55,16 +55,16 @@ SLACK_BOT_TOKEN=xoxb-...
 # GitHub App
 GITHUB_APP_ID=123456
 GITHUB_APP_INSTALLATION_ID=789012        # from the URL after installing the app
-GITHUB_APP_PRIVATE_KEY_PATH=/home/node/.openclaw/github-app.pem
+GITHUB_APP_PRIVATE_KEY_PATH=/opt/openclaw/github-app.pem
 GITHUB_WEBHOOK_SECRET=<from step 1>
 
 # OpenClaw gateway
 OPENCLAW_GATEWAY_TOKEN=<generate: openssl rand -hex 32>
 OPENCLAW_GATEWAY_BIND=lan
 
-# OpenClaw workspace (static — copy as-is)
-OPENCLAW_WORKSPACE=/home/node/.openclaw/workspace
-SESSION_MANAGER_SCRIPT=/home/node/.openclaw/workspace/skills/ocs/session-manager.sh
+# OpenClaw workspace
+OPENCLAW_WORKSPACE=/opt/openclaw
+SESSION_MANAGER_SCRIPT=/opt/openclaw/skills/ocs/session-manager.sh
 ```
 
 ### 4. Create the Pulumi state bucket
@@ -108,7 +108,7 @@ op run --env-file=.pulumi.env -- pulumi config set aws:region us-east-1
 
 > **Important:** Set `domain` before running `pulumi up`. The domain is baked into the EC2
 > bootstrap script at deploy time — if it's missing, bootstrap will fail and nothing will be
-> installed on the instance. To recover, terminate the instance and re-run `pulumi up`.
+> installed on the instance. Bootstrap is idempotent, so a full rebuild is just `pulumi destroy && pulumi up`.
 
 All subsequent Pulumi commands use the same `op run --env-file=.pulumi.env --` prefix — this injects `PULUMI_CONFIG_PASSPHRASE` from 1Password automatically. The S3 backend URL is already set in `Pulumi.yaml`.
 
@@ -147,7 +147,7 @@ aws secretsmanager put-secret-value \
 
 ### 10. Point DNS and wait for bootstrap
 
-Point your DNS A record for `agent.example.com` at the `public_ip` output. Bootstrap must be able to reach Let's Encrypt to get a TLS certificate — **DNS must be live before bootstrap runs certbot**.
+Point your DNS A record for `agent.example.com` at the `public_ip` output. Bootstrap must be able to reach Let's Encrypt to get a TLS certificate — **DNS must be live before bootstrap runs Caddy**.
 
 Bootstrap runs automatically on first boot and takes ~5 minutes. Watch progress via:
 
@@ -156,7 +156,7 @@ aws ssm start-session --target <instance-id> --region us-east-1
 sudo tail -f /var/log/bootstrap.log
 ```
 
-Bootstrap completes TLS (certbot webroot via Docker nginx) and starts all services automatically. No manual certbot step needed.
+Bootstrap installs OpenClaw, PostgreSQL, Caddy, and Docker as systemd services. Caddy handles TLS automatically via Let's Encrypt.
 
 ## Updating Config / Skills
 
@@ -174,22 +174,21 @@ SSH into the instance via SSM:
 
 ```bash
 aws ssm start-session --target <instance-id> --region <region>
-cd /data/openclaw
 ```
 
-**Container status:**
+**Service status:**
 ```bash
-docker compose ps
+systemctl status openclaw-gateway postgresql caddy
 ```
 
 **Gateway logs (live):**
 ```bash
-docker compose logs -f openclaw-gateway
+journalctl -u openclaw-gateway -f
 ```
 
 **Health check:**
 ```bash
-docker compose exec openclaw-gateway node dist/index.js health --token "$OPENCLAW_GATEWAY_TOKEN"
+openclaw doctor
 ```
 
 **Session containers** (ephemeral, spun up per task):
@@ -199,20 +198,34 @@ docker ps --filter name=session
 
 ## Administration (CLI)
 
-Use `openclaw-cli` to administer the running gateway:
+Use `openclaw` CLI to administer the running gateway:
 
 ```bash
-cd /data/openclaw
-
 # List pending pairing requests
-docker compose run --rm openclaw-cli pairing list
+openclaw pairing list
 
 # Approve a pairing request
-docker compose run --rm openclaw-cli pairing approve slack <code>
+openclaw pairing approve slack <code>
 
 # Check config
-docker compose run --rm openclaw-cli config get
+openclaw config get
 
 # Run health/diagnostics
-docker compose run --rm openclaw-cli doctor
+openclaw doctor
+```
+
+## Backup & Restore
+
+Backups run automatically every 4 hours via systemd timer. Manual operations:
+
+```bash
+# Trigger a backup now
+uv run inv backup
+
+# Restore from latest S3 backup
+uv run inv restore
+
+# On the instance directly:
+/opt/ocs-automation/scripts/backup-to-s3.sh
+/opt/ocs-automation/scripts/restore-from-s3.sh
 ```
