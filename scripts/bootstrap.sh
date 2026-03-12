@@ -209,6 +209,17 @@ echo "=== Phase 7: OpenClaw installation ==="
 # Install or update OpenClaw globally
 npm install -g openclaw@latest
 
+# Create base config if not present
+if [ ! -f /opt/openclaw/openclaw.json ]; then
+    cat > /opt/openclaw/openclaw.json << 'OCJSON'
+{
+  "gateway": {
+    "mode": "local"
+  }
+}
+OCJSON
+fi
+
 # Create systemd unit for openclaw-gateway (idempotent — always overwrite)
 cat > /etc/systemd/system/openclaw-gateway.service << 'EOF'
 [Unit]
