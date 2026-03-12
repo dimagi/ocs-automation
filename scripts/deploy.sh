@@ -58,7 +58,7 @@ COMMAND_ID=$(aws ssm send-command \
     --region "$REGION" \
     --timeout-seconds 300 \
     --parameters "commands=[
-        \"set -euo pipefail\",
+        \"set -eu\",
         \"echo '>>> Syncing from S3...'\",
         \"aws s3 sync s3://$BUCKET/deploy/ /opt/ocs-automation/ --delete --region $REGION\",
         \"echo '>>> Updating skills...'\",
