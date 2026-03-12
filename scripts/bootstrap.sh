@@ -74,6 +74,13 @@ apt-get install -y \
 systemctl enable docker
 systemctl start docker
 
+# AWS CLI v2 (idempotent — skip if already installed)
+if ! command -v aws &>/dev/null; then
+    curl -sL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+    cd /tmp && unzip -qo awscliv2.zip && ./aws/install
+    cd -
+fi
+
 echo "Phase 1 complete."
 
 # ---------------------------------------------------------------------------
