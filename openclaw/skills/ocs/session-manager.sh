@@ -32,6 +32,7 @@ docker run --rm \
     -e "TASK_ID=${TASK_ID}" \
     -e "DATABASE_URL=postgresql://openclaw@host.docker.internal:5432/${DB_NAME}" \
     -e "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" \
+    -e "GITHUB_TOKEN=${GITHUB_TOKEN:-}" \
     -e "DJANGO_SETTINGS_MODULE=open_chat_studio.settings" \
     -e "CACHE_BACKEND=django.core.cache.backends.dummy.DummyCache" \
     -v "${SESSION_DIR}:/workspace" \
