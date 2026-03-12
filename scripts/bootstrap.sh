@@ -218,9 +218,10 @@ Wants=postgresql.service
 
 [Service]
 Type=simple
+Environment=OPENCLAW_HOME=/opt/openclaw
 WorkingDirectory=/opt/openclaw
 EnvironmentFile=/opt/openclaw/.env
-ExecStart=/usr/bin/openclaw gateway
+ExecStart=/usr/bin/openclaw gateway --bind lan --port 18789
 Restart=on-failure
 RestartSec=5
 
