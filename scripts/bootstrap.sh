@@ -16,7 +16,9 @@ echo "=== Bootstrap started at $(date) ==="
 export HOME=/root
 export DEBIAN_FRONTEND=noninteractive
 
-if [ -z "$DOMAIN" ] || [ "$DOMAIN" = "__DOMAIN__" ]; then
+# Split the placeholder so Pulumi's replace() doesn't substitute inside the guard
+_PLACEHOLDER='__DOMA'"IN__"
+if [ -z "$DOMAIN" ] || [ "$DOMAIN" = "$_PLACEHOLDER" ]; then
     echo "ERROR: DOMAIN is not set. Ensure pulumi config set domain <your-domain> before deploying." >&2
     exit 1
 fi
