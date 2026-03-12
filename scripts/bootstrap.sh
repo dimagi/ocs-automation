@@ -163,10 +163,10 @@ else
     git clone https://github.com/dimagi/ocs-automation.git /opt/ocs-automation
 fi
 
-# Copy skills to OpenClaw workspace
+# Copy skills to OpenClaw global skills directory
 if [ -d /opt/ocs-automation/openclaw/skills ]; then
-    mkdir -p /opt/openclaw/.openclaw/workspace
-    cp -r /opt/ocs-automation/openclaw/skills/* /opt/openclaw/.openclaw/workspace/
+    mkdir -p /opt/openclaw/.openclaw/skills
+    cp -r /opt/ocs-automation/openclaw/skills/* /opt/openclaw/.openclaw/skills/
 fi
 
 # Copy and configure Caddyfile
