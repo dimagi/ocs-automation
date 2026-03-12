@@ -213,6 +213,11 @@ npm install -g openclaw@latest
 if [ ! -f /opt/openclaw/openclaw.json ]; then
     cat > /opt/openclaw/openclaw.json << 'OCJSON'
 {
+  "agents": {
+    "defaults": {
+      "workspace": "/opt/openclaw/workspace"
+    }
+  },
   "gateway": {
     "mode": "local"
   }
