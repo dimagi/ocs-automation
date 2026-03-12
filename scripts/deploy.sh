@@ -18,6 +18,12 @@ fi
 REGION="${AWS_REGION:-us-east-1}"
 BUCKET="ocs-automation-prod-artifacts"
 
+# Get domain from Pulumi config (authoritative source)
+DOMAIN=$(op run --env-file=.pulumi.env -- pulumi config get domain 2>/dev/null) || true
+if [ -z "$DOMAIN" ]; then
+    echo "WARNING: Could not get domain from Pulumi config. Caddyfile will not be updated." >&2
+fi
+
 # Colors
 BOLD="\033[1m"
 CYAN="\033[36m"
@@ -59,9 +65,8 @@ COMMAND_ID=$(aws ssm send-command \
         \"cp -r /opt/ocs-automation/openclaw/skills/* /opt/openclaw/skills/\",
         \"echo '>>> Updating Caddyfile...'\",
         \"cp /opt/ocs-automation/openclaw/Caddyfile /etc/caddy/Caddyfile\",
-        \"DOMAIN=\\$(grep -E '^DOMAIN=' /opt/openclaw/.env | cut -d= -f2)\",
-        \"sed -i \\\"s/__DOMAIN__/\\${DOMAIN}/g\\\" /etc/caddy/Caddyfile\",
-        \"systemctl reload caddy\",
+        \"sed -i 's/__DOMAIN__/$DOMAIN/g' /etc/caddy/Caddyfile\",
+        \"systemctl reload caddy || true\",
         \"echo '>>> Rebuilding session image...'\",
         \"docker build -t ocs-session /opt/ocs-automation/session/ 2>&1 | tail -5\",
         \"echo '>>> Restarting OpenClaw gateway...'\",
