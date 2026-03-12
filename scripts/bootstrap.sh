@@ -93,11 +93,11 @@ else
 fi
 
 # acpx
-if ! npm list -g @anthropic-ai/acpx &>/dev/null; then
-    npm install -g @anthropic-ai/acpx@latest
+if ! npm list -g acpx &>/dev/null; then
+    npm install -g acpx@latest
 else
     echo "acpx already installed, updating."
-    npm install -g @anthropic-ai/acpx@latest
+    npm install -g acpx@latest
 fi
 
 # Claude Code
