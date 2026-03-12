@@ -211,7 +211,8 @@ npm install -g openclaw@latest
 
 # Create base config if not present
 if [ ! -f /opt/openclaw/openclaw.json ]; then
-    cat > /opt/openclaw/openclaw.json << 'OCJSON'
+    AUTH_TOKEN=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
+    cat > /opt/openclaw/openclaw.json << OCJSON
 {
   "agents": {
     "defaults": {
@@ -219,10 +220,25 @@ if [ ! -f /opt/openclaw/openclaw.json ]; then
     }
   },
   "gateway": {
-    "mode": "local"
+    "mode": "local",
+    "auth": {
+      "token": "${AUTH_TOKEN}"
+    },
+    "trustedProxies": ["127.0.0.1"]
   }
 }
 OCJSON
+    chmod 600 /opt/openclaw/openclaw.json
+    echo "Gateway auth token: ${AUTH_TOKEN}"
+    echo "Save this token — needed for GitHub webhook configuration."
+fi
+
+# Ensure correct ownership
+chown -R root:root /opt/openclaw
+
+# Run openclaw setup to generate workspace bootstrap files if missing
+if [ ! -f /opt/openclaw/workspace/AGENTS.md ]; then
+    OPENCLAW_HOME=/opt/openclaw openclaw setup --non-interactive 2>/dev/null || true
 fi
 
 # Create systemd unit for openclaw-gateway (idempotent — always overwrite)
