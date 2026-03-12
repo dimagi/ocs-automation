@@ -45,20 +45,18 @@ https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
 fi
 
 # Caddy — install binary directly (apt repo GPG key has expired)
+mkdir -p /etc/caddy
 if ! command -v caddy &>/dev/null; then
     curl -sL "https://caddyserver.com/api/download?os=linux&arch=amd64" -o /usr/bin/caddy
     chmod +x /usr/bin/caddy
-    # Install systemd unit if not present
-    if [ ! -f /etc/systemd/system/caddy.service ]; then
-        caddy environ 2>/dev/null || true
-        groupadd --system caddy 2>/dev/null || true
-        useradd --system --gid caddy --create-home --home-dir /var/lib/caddy --shell /usr/sbin/nologin caddy 2>/dev/null || true
-        mkdir -p /etc/caddy
-        curl -sL "https://raw.githubusercontent.com/caddyserver/dist/master/init/caddy.service" \
-            -o /etc/systemd/system/caddy.service
-        systemctl daemon-reload
-        systemctl enable caddy
-    fi
+    groupadd --system caddy 2>/dev/null || true
+    useradd --system --gid caddy --create-home --home-dir /var/lib/caddy --shell /usr/sbin/nologin caddy 2>/dev/null || true
+fi
+if [ ! -f /etc/systemd/system/caddy.service ]; then
+    curl -sL "https://raw.githubusercontent.com/caddyserver/dist/master/init/caddy.service" \
+        -o /etc/systemd/system/caddy.service
+    systemctl daemon-reload
+    systemctl enable caddy
 fi
 
 # NodeSource repo for Node.js 22 (idempotent — skip if list file exists)
