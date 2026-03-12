@@ -145,7 +145,7 @@ echo "Phase 3 complete."
 # ---------------------------------------------------------------------------
 echo "=== Phase 4: Directory structure ==="
 
-mkdir -p /opt/openclaw/{config,memory,skills}
+mkdir -p /opt/openclaw
 mkdir -p /opt/ocs-automation
 mkdir -p /data/sessions
 
@@ -163,9 +163,10 @@ else
     git clone https://github.com/dimagi/ocs-automation.git /opt/ocs-automation
 fi
 
-# Copy skills to OpenClaw directory
+# Copy skills to OpenClaw workspace
 if [ -d /opt/ocs-automation/openclaw/skills ]; then
-    cp -r /opt/ocs-automation/openclaw/skills/* /opt/openclaw/skills/
+    mkdir -p /opt/openclaw/.openclaw/workspace
+    cp -r /opt/ocs-automation/openclaw/skills/* /opt/openclaw/.openclaw/workspace/
 fi
 
 # Copy and configure Caddyfile
@@ -209,14 +210,19 @@ echo "=== Phase 7: OpenClaw installation ==="
 # Install or update OpenClaw globally
 npm install -g openclaw@latest
 
+# Run openclaw setup to initialize .openclaw directory structure
+OPENCLAW_HOME=/opt/openclaw openclaw setup --non-interactive 2>/dev/null || true
+
 # Create base config if not present
-if [ ! -f /opt/openclaw/openclaw.json ]; then
+OC_CONFIG="/opt/openclaw/.openclaw/openclaw.json"
+if [ ! -f "$OC_CONFIG" ]; then
+    mkdir -p /opt/openclaw/.openclaw
     AUTH_TOKEN=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
-    cat > /opt/openclaw/openclaw.json << OCJSON
+    cat > "$OC_CONFIG" << OCJSON
 {
   "agents": {
     "defaults": {
-      "workspace": "/opt/openclaw/workspace"
+      "workspace": "/opt/openclaw/.openclaw/workspace"
     }
   },
   "gateway": {
@@ -228,18 +234,13 @@ if [ ! -f /opt/openclaw/openclaw.json ]; then
   }
 }
 OCJSON
-    chmod 600 /opt/openclaw/openclaw.json
+    chmod 600 "$OC_CONFIG"
     echo "Gateway auth token: ${AUTH_TOKEN}"
     echo "Save this token — needed for GitHub webhook configuration."
 fi
 
 # Ensure correct ownership
 chown -R root:root /opt/openclaw
-
-# Run openclaw setup to generate workspace bootstrap files if missing
-if [ ! -f /opt/openclaw/workspace/AGENTS.md ]; then
-    OPENCLAW_HOME=/opt/openclaw openclaw setup --non-interactive 2>/dev/null || true
-fi
 
 # Create systemd unit for openclaw-gateway (idempotent — always overwrite)
 cat > /etc/systemd/system/openclaw-gateway.service << 'EOF'
@@ -277,10 +278,9 @@ BUCKET=$(aws s3 ls --region "$REGION" 2>/dev/null | grep ocs-automation | head -
 if [ -n "$BUCKET" ] && aws s3 ls "s3://${BUCKET}/backups/latest/" --region "$REGION" 2>/dev/null; then
     echo "Restoring from S3 backup (s3://${BUCKET}/backups/latest/)..."
 
-    # Restore OpenClaw config, memory, and skills (exclude .env)
-    aws s3 sync "s3://${BUCKET}/backups/latest/openclaw/config/" /opt/openclaw/config/ --region "$REGION"
-    aws s3 sync "s3://${BUCKET}/backups/latest/openclaw/memory/" /opt/openclaw/memory/ --region "$REGION"
-    aws s3 sync "s3://${BUCKET}/backups/latest/openclaw/skills/" /opt/openclaw/skills/ --region "$REGION"
+    # Restore OpenClaw state (exclude openclaw.json to preserve auth token)
+    aws s3 sync "s3://${BUCKET}/backups/latest/openclaw/" /opt/openclaw/.openclaw/ \
+        --exclude "openclaw.json" --region "$REGION"
 
     # Restore Postgres dumps if they exist
     DUMP="/tmp/openclaw-pg-restore.sql"

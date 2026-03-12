@@ -8,10 +8,9 @@ PREFIX="backups/${TIMESTAMP}"
 
 echo "Backing up to s3://${BUCKET}/${PREFIX}/"
 
-# OpenClaw config and memory
-aws s3 sync /opt/openclaw/config/ "s3://${BUCKET}/${PREFIX}/openclaw/config/"
-aws s3 sync /opt/openclaw/memory/ "s3://${BUCKET}/${PREFIX}/openclaw/memory/"
-aws s3 sync /opt/openclaw/skills/ "s3://${BUCKET}/${PREFIX}/openclaw/skills/"
+# OpenClaw state (config, memory, workspace, agents — exclude logs and identity)
+aws s3 sync /opt/openclaw/.openclaw/ "s3://${BUCKET}/${PREFIX}/openclaw/" \
+    --exclude "logs/*" --exclude "identity/*"
 
 # Postgres dump (non-session databases only)
 sudo -u postgres pg_dumpall --exclude-database='session_*' --format=plain \
