@@ -44,12 +44,21 @@ https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
         > /etc/apt/sources.list.d/docker.list
 fi
 
-# Caddy repo (idempotent — skip if list file exists)
-if [ ! -f /etc/apt/sources.list.d/caddy-fury.list ]; then
-    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
-        | gpg --dearmor -o /etc/apt/keyrings/caddy-stable-archive-keyring.gpg
-    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
-        > /etc/apt/sources.list.d/caddy-fury.list
+# Caddy — install binary directly (apt repo GPG key has expired)
+if ! command -v caddy &>/dev/null; then
+    curl -sL "https://caddyserver.com/api/download?os=linux&arch=amd64" -o /usr/bin/caddy
+    chmod +x /usr/bin/caddy
+    # Install systemd unit if not present
+    if [ ! -f /etc/systemd/system/caddy.service ]; then
+        caddy environ 2>/dev/null || true
+        groupadd --system caddy 2>/dev/null || true
+        useradd --system --gid caddy --create-home --home-dir /var/lib/caddy --shell /usr/sbin/nologin caddy 2>/dev/null || true
+        mkdir -p /etc/caddy
+        curl -sL "https://raw.githubusercontent.com/caddyserver/dist/master/init/caddy.service" \
+            -o /etc/systemd/system/caddy.service
+        systemctl daemon-reload
+        systemctl enable caddy
+    fi
 fi
 
 # NodeSource repo for Node.js 22 (idempotent — skip if list file exists)
@@ -61,7 +70,6 @@ apt-get update -y
 apt-get install -y \
     docker-ce docker-ce-cli containerd.io docker-compose-plugin \
     postgresql postgresql-client \
-    caddy \
     nodejs \
     git curl jq unzip
 
