@@ -136,7 +136,7 @@ def ssh(c):
     c.run(
         f"aws ssm start-session --target {instance_id} --region {REGION}"
         f" --document-name AWS-StartInteractiveCommand"
-        f" --parameters command='cd /opt/openclaw && OPENCLAW_HOME=/opt/openclaw bash -l'",
+        f" --parameters command='sudo su -s /bin/bash - openclaw'",
         pty=True,
     )
 
