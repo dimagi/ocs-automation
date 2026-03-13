@@ -8,6 +8,7 @@ echo "Restoring from s3://${BUCKET}/${PREFIX}/"
 
 # Restore OpenClaw state
 aws s3 sync "s3://${BUCKET}/${PREFIX}/openclaw/" /opt/openclaw/.openclaw/
+chmod 600 /opt/openclaw/.openclaw/openclaw.json 2>/dev/null || true
 
 # Restore Postgres (if dump exists)
 DUMP="/tmp/openclaw-pg-restore.sql"

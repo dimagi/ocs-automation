@@ -295,6 +295,7 @@ if aws s3 ls "s3://${BUCKET}/backups/latest/" --region "$REGION" 2>/dev/null; th
     # Restore OpenClaw state
     aws s3 sync "s3://${BUCKET}/backups/latest/openclaw/" /opt/openclaw/.openclaw/ \
         --region "$REGION"
+    chmod 600 /opt/openclaw/.openclaw/openclaw.json 2>/dev/null || true
 
     # Restore Postgres dumps if they exist
     DUMP="/tmp/openclaw-pg-restore.sql"
