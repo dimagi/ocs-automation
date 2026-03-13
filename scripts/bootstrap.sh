@@ -284,9 +284,9 @@ echo "Phase 7 complete."
 # ---------------------------------------------------------------------------
 echo "=== Phase 8: S3 restore (if backup exists) ==="
 
-BUCKET=$(aws s3 ls --region "$REGION" 2>/dev/null | grep ocs-automation | head -1 | awk '{print $3}') || true
+BUCKET="ocs-automation-prod-artifacts"
 
-if [ -n "$BUCKET" ] && aws s3 ls "s3://${BUCKET}/backups/latest/" --region "$REGION" 2>/dev/null; then
+if aws s3 ls "s3://${BUCKET}/backups/latest/" --region "$REGION" 2>/dev/null; then
     echo "Restoring from S3 backup (s3://${BUCKET}/backups/latest/)..."
 
     # Restore OpenClaw state (exclude openclaw.json to preserve auth token)

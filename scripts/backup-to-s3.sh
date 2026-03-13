@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-# Determine bucket from env or auto-detect
-BUCKET="${BACKUP_BUCKET:-$(aws s3 ls | grep ocs-automation | head -1 | awk '{print $3}')}"
+# Determine bucket from env or use default
+BUCKET="${BACKUP_BUCKET:-ocs-automation-prod-artifacts}"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 PREFIX="backups/${TIMESTAMP}"
 

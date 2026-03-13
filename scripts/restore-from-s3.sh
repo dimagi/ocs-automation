@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-BUCKET="${BACKUP_BUCKET:-$(aws s3 ls | grep ocs-automation | head -1 | awk '{print $3}')}"
+BUCKET="${BACKUP_BUCKET:-ocs-automation-prod-artifacts}"
 PREFIX="${1:-backups/latest}"
 
 echo "Restoring from s3://${BUCKET}/${PREFIX}/"
