@@ -128,15 +128,19 @@ def deploy(c):
 # ---------------------------------------------------------------------------
 
 
-@task
-def ssh(c):
+@task(help={"root": "Login as root instead of openclaw user"})
+def ssh(c, root=False):
     """Open an SSM session to the EC2 instance."""
     instance_id = _instance_id(c)
+    if root:
+        cmd = "sudo bash -l"
+    else:
+        cmd = "sudo su -s /bin/bash - openclaw"
     _info(f"Connecting to {_BOLD}{instance_id}{_RESET}...")
     c.run(
         f"aws ssm start-session --target {instance_id} --region {REGION}"
         f" --document-name AWS-StartInteractiveCommand"
-        f" --parameters command='sudo su -s /bin/bash - openclaw'",
+        f" --parameters command='{cmd}'",
         pty=True,
     )
 
