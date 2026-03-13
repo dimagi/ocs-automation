@@ -240,6 +240,9 @@ if [ ! -f "$OC_CONFIG" ]; then
     "auth": {
       "token": "${AUTH_TOKEN}"
     },
+    "remote" {
+        "token": "${AUTH_TOKEN}"
+    }
     "trustedProxies": ["127.0.0.1"]
   }
 }
@@ -289,9 +292,9 @@ BUCKET="ocs-automation-prod-artifacts"
 if aws s3 ls "s3://${BUCKET}/backups/latest/" --region "$REGION" 2>/dev/null; then
     echo "Restoring from S3 backup (s3://${BUCKET}/backups/latest/)..."
 
-    # Restore OpenClaw state (exclude openclaw.json to preserve auth token)
+    # Restore OpenClaw state
     aws s3 sync "s3://${BUCKET}/backups/latest/openclaw/" /opt/openclaw/.openclaw/ \
-        --exclude "openclaw.json" --region "$REGION"
+        --region "$REGION"
 
     # Restore Postgres dumps if they exist
     DUMP="/tmp/openclaw-pg-restore.sql"

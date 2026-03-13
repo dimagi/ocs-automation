@@ -6,9 +6,8 @@ PREFIX="${1:-backups/latest}"
 
 echo "Restoring from s3://${BUCKET}/${PREFIX}/"
 
-# Restore OpenClaw state (exclude openclaw.json to preserve auth token)
-aws s3 sync "s3://${BUCKET}/${PREFIX}/openclaw/" /opt/openclaw/.openclaw/ \
-    --exclude "openclaw.json"
+# Restore OpenClaw state
+aws s3 sync "s3://${BUCKET}/${PREFIX}/openclaw/" /opt/openclaw/.openclaw/
 
 # Restore Postgres (if dump exists)
 DUMP="/tmp/openclaw-pg-restore.sql"
