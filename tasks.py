@@ -225,7 +225,7 @@ def backup(c):
     """Trigger S3 backup on the instance."""
     instance_id = _instance_id(c)
     _step("Running backup...")
-    _ssm_run(c, instance_id, "/opt/ocs-automation/scripts/backup-to-s3.sh")
+    _ssm_run(c, instance_id, "bash /opt/ocs-automation/scripts/backup-to-s3.sh")
     _success("Backup complete.")
 
 
@@ -234,7 +234,8 @@ def restore(c, timestamp="latest"):
     """Restore from S3 backup."""
     instance_id = _instance_id(c)
     _step(f"Restoring from backup ({timestamp})...")
-    _ssm_run(c, instance_id, f"/opt/ocs-automation/scripts/restore-from-s3.sh backups/{timestamp}")
+    cmd = f"bash /opt/ocs-automation/scripts/restore-from-s3.sh backups/{timestamp}"
+    _ssm_run(c, instance_id, cmd)
     _success("Restore complete.")
 
 
