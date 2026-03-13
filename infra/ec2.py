@@ -50,7 +50,12 @@ def create_instance(
         root_block_device=aws.ec2.InstanceRootBlockDeviceArgs(
             volume_size=150,
             volume_type="gp3",
+            encrypted=True,
             delete_on_termination=True,
+        ),
+        metadata_options=aws.ec2.InstanceMetadataOptionsArgs(
+            http_tokens="required",
+            http_put_response_hop_limit=1,
         ),
         tags={"Name": make_name("instance"), "Project": PROJECT_NAME},
     )

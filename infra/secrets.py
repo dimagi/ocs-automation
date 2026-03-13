@@ -20,7 +20,7 @@ def create_secrets() -> dict[str, aws.secretsmanager.Secret]:
         make_name("openclaw-env"),
         name=f"{PROJECT_NAME}/openclaw-env",
         description="OpenClaw .env file: Anthropic, Slack, GitHub credentials",
-        recovery_window_in_days=0,
+        recovery_window_in_days=7,
         tags={"Project": PROJECT_NAME},
     )
 
@@ -29,7 +29,7 @@ def create_secrets() -> dict[str, aws.secretsmanager.Secret]:
         make_name("github-app-key"),
         name=f"{PROJECT_NAME}/github-app-key",
         description="GitHub App private key PEM for OCS automation",
-        recovery_window_in_days=0,
+        recovery_window_in_days=7,
         tags={"Project": PROJECT_NAME},
     )
 

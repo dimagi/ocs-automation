@@ -33,4 +33,25 @@ def create_artifacts_bucket() -> aws.s3.BucketV2:
         ],
     )
 
+    aws.s3.BucketPublicAccessBlock(
+        make_name("artifacts-pab"),
+        bucket=bucket.id,
+        block_public_acls=True,
+        block_public_policy=True,
+        ignore_public_acls=True,
+        restrict_public_buckets=True,
+    )
+
+    aws.s3.BucketServerSideEncryptionConfigurationV2(
+        make_name("artifacts-sse"),
+        bucket=bucket.id,
+        rules=[
+            aws.s3.BucketServerSideEncryptionConfigurationV2RuleArgs(
+                apply_server_side_encryption_by_default=aws.s3.BucketServerSideEncryptionConfigurationV2RuleApplyServerSideEncryptionByDefaultArgs(
+                    sse_algorithm="aws:kms",
+                ),
+            )
+        ],
+    )
+
     return bucket

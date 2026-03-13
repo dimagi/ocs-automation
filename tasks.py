@@ -2,6 +2,7 @@
 # Invoke tasks for ocs-automation ops.
 # Usage: uv run inv <task>    or    uv run inv --list
 import json
+import shlex
 import sys
 import time
 
@@ -85,14 +86,15 @@ def rebuild(c):
     instance_id = _instance_id(c)
     _info(f"Terminating instance {_BOLD}{instance_id}{_RESET}...")
     result = c.run(
-        f"aws ec2 terminate-instances --instance-ids {instance_id} --region {REGION}",
+        f"aws ec2 terminate-instances --instance-ids {shlex.quote(instance_id)} --region {REGION}",
         pty=True,
         warn=True,
     )
     if result.ok:
         _step("Waiting for instance to terminate...")
         c.run(
-            f"aws ec2 wait instance-terminated --instance-ids {instance_id} --region {REGION}",
+            f"aws ec2 wait instance-terminated"
+            f" --instance-ids {shlex.quote(instance_id)} --region {REGION}",
             pty=True,
         )
         _success("Instance terminated.")
@@ -184,10 +186,11 @@ def health(c):
 @task(help={"env_file": "Path to .env.prod file (default: .env.prod)"})
 def push_secrets(c, env_file=".env.prod"):
     """Upload .env.prod to AWS Secrets Manager."""
+    quoted_file = shlex.quote(env_file)
     c.run(
         f"aws secretsmanager put-secret-value"
         f" --secret-id ocs-automation/openclaw-env"
-        f' --secret-string "$(cat {env_file})"'
+        f" --secret-string \"$(cat {quoted_file})\""
         f" --region {REGION}",
         pty=True,
     )
@@ -197,10 +200,11 @@ def push_secrets(c, env_file=".env.prod"):
 @task(help={"pem_file": "Path to GitHub App PEM file"})
 def push_github_key(c, pem_file):
     """Upload GitHub App private key to AWS Secrets Manager."""
+    quoted_file = shlex.quote(pem_file)
     c.run(
         f"aws secretsmanager put-secret-value"
         f" --secret-id ocs-automation/github-app-key"
-        f' --secret-string "$(cat {pem_file})"'
+        f" --secret-string \"$(cat {quoted_file})\""
         f" --region {REGION}",
         pty=True,
     )
@@ -256,12 +260,14 @@ def fmt(c):
 
 def _ssm_run(c: Context, instance_id: str, command: str):
     """Run a command on the EC2 instance via SSM and stream output."""
+    quoted_id = shlex.quote(instance_id)
+    quoted_cmd = json.dumps([command])
     result = c.run(
         f"aws ssm send-command"
-        f" --instance-ids {instance_id}"
+        f" --instance-ids {quoted_id}"
         f' --document-name "AWS-RunShellScript"'
         f" --region {REGION}"
-        f" --parameters 'commands=[\"{command}\"]'"
+        f" --parameters commands={shlex.quote(quoted_cmd)}"
         f" --query Command.CommandId"
         f" --output text",
         hide=True,
@@ -280,8 +286,8 @@ def _ssm_run(c: Context, instance_id: str, command: str):
         time.sleep(2)
         poll = c.run(
             f"aws ssm get-command-invocation"
-            f" --command-id {command_id}"
-            f" --instance-id {instance_id}"
+            f" --command-id {shlex.quote(command_id)}"
+            f" --instance-id {quoted_id}"
             f" --region {REGION}"
             f" --output json",
             hide=True,

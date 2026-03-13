@@ -20,7 +20,7 @@ chmod 600 "$SESSION_DIR/task-prompt.txt"
 
 # Create session database
 DB_NAME="session_${TASK_ID}"
-createdb -U openclaw "$DB_NAME" 2>/dev/null || echo "Database $DB_NAME already exists"
+createdb -h 127.0.0.1 -U openclaw "$DB_NAME" 2>/dev/null || echo "Database $DB_NAME already exists"
 
 # Source environment for API keys
 source /opt/openclaw/.env
@@ -29,6 +29,9 @@ source /opt/openclaw/.env
 docker run --rm \
     --name "session-${TASK_ID}" \
     --add-host=host.docker.internal:host-gateway \
+    --memory=4g \
+    --cpus=2 \
+    --pids-limit=512 \
     -e "TASK_ID=${TASK_ID}" \
     -e "DATABASE_URL=postgresql://openclaw@host.docker.internal:5432/${DB_NAME}" \
     -e "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" \
@@ -41,7 +44,7 @@ docker run --rm \
 EXIT_CODE=$?
 
 # Drop session database
-dropdb -U openclaw "$DB_NAME" 2>/dev/null || echo "Database $DB_NAME already dropped"
+dropdb -h 127.0.0.1 -U openclaw "$DB_NAME" 2>/dev/null || echo "Database $DB_NAME already dropped"
 
 # Report output
 if [ -f "$SESSION_DIR/output.json" ]; then

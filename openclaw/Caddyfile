@@ -1,4 +1,12 @@
 # Domain is substituted by deploy script
 __DOMAIN__ {
+    header {
+        Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
     reverse_proxy localhost:18789
 }

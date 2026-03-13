@@ -133,6 +133,10 @@ sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='openclaw'" | gr
 grep -q '172.17.0.0/16' "$PG_HBA" \
     || echo 'host all openclaw 172.17.0.0/16 trust' >> "$PG_HBA"
 
+# Allow openclaw role from localhost via TCP (for session-manager running as openclaw)
+grep -q '127.0.0.1/32.*openclaw' "$PG_HBA" \
+    || echo 'host all openclaw 127.0.0.1/32 trust' >> "$PG_HBA"
+
 # Set listen_addresses to include Docker bridge (idempotent via sed)
 sed -i "s/^#\?listen_addresses.*/listen_addresses = 'localhost,172.17.0.1'/" "$PG_CONF"
 
@@ -144,6 +148,12 @@ echo "Phase 3 complete."
 # Phase 4 — Directory structure
 # ---------------------------------------------------------------------------
 echo "=== Phase 4: Directory structure ==="
+
+# Create openclaw system user (idempotent)
+id -u openclaw &>/dev/null || useradd --system --create-home --home-dir /opt/openclaw --shell /usr/sbin/nologin openclaw
+
+# Gateway user needs Docker socket access to launch session containers
+usermod -aG docker openclaw
 
 mkdir -p /opt/openclaw
 mkdir -p /opt/ocs-automation
@@ -235,12 +245,11 @@ if [ ! -f "$OC_CONFIG" ]; then
 }
 OCJSON
     chmod 600 "$OC_CONFIG"
-    echo "Gateway auth token: ${AUTH_TOKEN}"
-    echo "Save this token — needed for GitHub webhook configuration."
+    echo "Gateway auth token written to ${OC_CONFIG}"
 fi
 
 # Ensure correct ownership
-chown -R root:root /opt/openclaw
+chown -R openclaw:openclaw /opt/openclaw
 
 # Create systemd unit for openclaw-gateway (idempotent — always overwrite)
 cat > /etc/systemd/system/openclaw-gateway.service << 'EOF'
@@ -251,6 +260,8 @@ Wants=postgresql.service
 
 [Service]
 Type=simple
+User=openclaw
+Group=openclaw
 Environment=OPENCLAW_HOME=/opt/openclaw
 WorkingDirectory=/opt/openclaw
 EnvironmentFile=/opt/openclaw/.env
