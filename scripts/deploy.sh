@@ -64,6 +64,7 @@ COMMAND_ID=$(aws ssm send-command \
         \"echo '>>> Updating skills...'\",
         \"mkdir -p /opt/openclaw/.openclaw/skills\",
         \"cp -r /opt/ocs-automation/openclaw/skills/* /opt/openclaw/.openclaw/skills/\",
+        \"chown -R openclaw:openclaw /opt/openclaw 2>/dev/null || true\",
         \"echo '>>> Updating Caddyfile...'\",
         \"cp /opt/ocs-automation/openclaw/Caddyfile /etc/caddy/Caddyfile\",
         \"sed -i 's/__DOMAIN__/$DOMAIN/g' /etc/caddy/Caddyfile\",
