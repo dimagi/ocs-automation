@@ -184,9 +184,19 @@ def ssh(c, root=False):
 def logs(c, follow=False, lines=100):
     """Show openclaw-gateway logs via SSM."""
     instance_id = _instance_id(c)
-    tail = "-f" if follow else f"-n {lines}"
-    _step("Fetching gateway logs...")
-    _ssm_run(c, instance_id, f"journalctl -u openclaw-gateway {tail} --no-pager")
+    if follow:
+        _step("Tailing gateway logs (Ctrl+C to stop)...")
+        cmd = "sudo journalctl -u openclaw-gateway -f --no-pager"
+        c.run(
+            f"aws ssm start-session --target {shlex.quote(instance_id)}"
+            f" --region {REGION}"
+            f" --document-name AWS-StartInteractiveCommand"
+            f" --parameters command='{cmd}'",
+            pty=True,
+        )
+    else:
+        _step("Fetching gateway logs...")
+        _ssm_run(c, instance_id, f"journalctl -u openclaw-gateway -n {lines} --no-pager")
 
 
 @task
