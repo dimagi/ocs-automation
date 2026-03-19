@@ -2,6 +2,7 @@
 # Invoke tasks for ocs-automation ops.
 # Usage: uv run inv <task>    or    uv run inv --list
 import json
+import os
 import shlex
 import sys
 import time
@@ -9,6 +10,13 @@ import time
 from invoke import Context, task
 
 REGION = "us-east-1"
+DEFAULT_AWS_PROFILE = "ocs-misc"
+
+if not os.environ.get("AWS_PROFILE"):
+    os.environ["AWS_PROFILE"] = DEFAULT_AWS_PROFILE
+    _APPLIED_DEFAULT_PROFILE = True
+else:
+    _APPLIED_DEFAULT_PROFILE = False
 BUCKET = "ocs-automation-prod-artifacts"
 OP_PREFIX = "op run --env-file=.pulumi.env --"
 
@@ -21,6 +29,16 @@ _RED = "\033[31m"
 _DIM = "\033[2m"
 _RESET = "\033[0m"
 _PREFIX = f"{_BOLD}{_CYAN}[ocs]{_RESET}"
+
+
+def _print_profile_notice():
+    global _APPLIED_DEFAULT_PROFILE
+    if _APPLIED_DEFAULT_PROFILE:
+        print(
+            f"{_PREFIX} {_YELLOW}AWS_PROFILE not set — using default"
+            f" '{DEFAULT_AWS_PROFILE}'{_RESET}"
+        )
+        _APPLIED_DEFAULT_PROFILE = False  # only print once per invocation
 
 
 def _info(msg: str):
@@ -45,6 +63,7 @@ def _step(msg: str):
 
 def _pulumi_output(c: Context, key: str) -> str:
     """Get a single Pulumi stack output value."""
+    _print_profile_notice()
     result = c.run(f"{OP_PREFIX} pulumi stack output {key}", hide=True, warn=True)
     if result.failed:
         _error(f"Failed to get pulumi output '{key}'. Is the stack initialized?")
@@ -64,19 +83,26 @@ def _instance_id(c: Context) -> str:
 @task(help={"yes": "Skip confirmation prompt"})
 def up(c, yes=False):
     """Deploy or update infrastructure via Pulumi."""
+    _print_profile_notice()
     flag = " --yes" if yes else ""
     c.run(f"{OP_PREFIX} pulumi up{flag}", pty=True)
+    _warn(
+        "If the Elastic IP changed, update DNS for your domain to point to the"
+        " new IP. Check with: uv run inv outputs"
+    )
 
 
 @task
 def outputs(c):
     """Show Pulumi stack outputs."""
+    _print_profile_notice()
     c.run(f"{OP_PREFIX} pulumi stack output", pty=True)
 
 
 @task
 def preview(c):
     """Preview infrastructure changes without applying."""
+    _print_profile_notice()
     c.run(f"{OP_PREFIX} pulumi preview", pty=True)
 
 
@@ -107,6 +133,10 @@ def rebuild(c):
         pty=True,
     )
     _success("Rebuild complete.")
+    _warn(
+        "The Elastic IP has changed — update DNS for your domain to point to"
+        " the new IP. Check with: uv run inv outputs"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -190,6 +220,7 @@ def health(c):
 @task(help={"env_file": "Path to .env.prod file (default: .env.prod)"})
 def push_secrets(c, env_file=".env.prod"):
     """Upload .env.prod to AWS Secrets Manager."""
+    _print_profile_notice()
     quoted_file = shlex.quote(env_file)
     c.run(
         f"aws secretsmanager put-secret-value"
@@ -204,6 +235,7 @@ def push_secrets(c, env_file=".env.prod"):
 @task(help={"pem_file": "Path to GitHub App PEM file"})
 def push_github_key(c, pem_file):
     """Upload GitHub App private key to AWS Secrets Manager."""
+    _print_profile_notice()
     quoted_file = shlex.quote(pem_file)
     c.run(
         f"aws secretsmanager put-secret-value"

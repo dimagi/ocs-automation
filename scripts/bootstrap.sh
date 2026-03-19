@@ -220,6 +220,12 @@ echo "=== Phase 7: OpenClaw installation ==="
 # Install or update OpenClaw globally
 npm install -g openclaw@latest
 
+# Grant openclaw user write access to the global module so it can install extensions (acpx)
+OC_MODULE_DIR=$(npm root -g)/openclaw
+if [ -d "$OC_MODULE_DIR" ]; then
+    chown -R openclaw:openclaw "$OC_MODULE_DIR"
+fi
+
 # Run openclaw setup to initialize .openclaw directory structure
 OPENCLAW_HOME=/opt/openclaw openclaw setup --non-interactive 2>/dev/null || true
 
