@@ -63,6 +63,7 @@ COMMAND_ID=$(aws ssm send-command \
         \"aws s3 sync s3://$BUCKET/deploy/ /opt/ocs-automation/ --delete --region $REGION\",
         \"echo '>>> Updating skills...'\",
         \"mkdir -p /opt/openclaw/.openclaw/skills\",
+        \"rm -rf /opt/openclaw/.openclaw/skills/ocs/\",
         \"cp -r /opt/ocs-automation/openclaw/skills/* /opt/openclaw/.openclaw/skills/\",
         \"chown -R openclaw:openclaw /opt/openclaw 2>/dev/null || true\",
         \"echo '>>> Updating Caddyfile...'\",
