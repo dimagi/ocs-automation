@@ -233,6 +233,39 @@ if [ ! -f "$OC_CONFIG" ]; then
   "agents": {
     "defaults": {
       "workspace": "/opt/openclaw/.openclaw/workspace"
+    },
+    "list": [
+      {
+        "id": "claude",
+        "runtime": {
+          "type": "acp",
+          "acp": {
+            "agent": "claude",
+            "backend": "acpx",
+            "mode": "persistent",
+            "cwd": "/workspace/app"
+          }
+        }
+      }
+    ]
+  },
+  "acp": {
+    "enabled": true,
+    "dispatch": { "enabled": true },
+    "backend": "acpx",
+    "defaultAgent": "claude",
+    "allowedAgents": ["claude"],
+    "maxConcurrentSessions": 4
+  },
+  "plugins": {
+    "entries": {
+      "acpx": {
+        "enabled": true,
+        "config": {
+          "permissionMode": "approve-all",
+          "nonInteractivePermissions": "fail"
+        }
+      }
     }
   },
   "gateway": {
@@ -240,9 +273,9 @@ if [ ! -f "$OC_CONFIG" ]; then
     "auth": {
       "token": "${AUTH_TOKEN}"
     },
-    "remote" {
-        "token": "${AUTH_TOKEN}"
-    }
+    "remote": {
+      "token": "${AUTH_TOKEN}"
+    },
     "trustedProxies": ["127.0.0.1"]
   }
 }
