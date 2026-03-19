@@ -212,6 +212,15 @@ def health(c):
     _ssm_run(c, instance_id, "openclaw doctor")
 
 
+@task
+def restart(c):
+    """Restart the openclaw-gateway service."""
+    instance_id = _instance_id(c)
+    _step("Restarting openclaw-gateway...")
+    _ssm_run(c, instance_id, "systemctl restart openclaw-gateway")
+    _success("Gateway restarted.")
+
+
 # ---------------------------------------------------------------------------
 # Secrets
 # ---------------------------------------------------------------------------

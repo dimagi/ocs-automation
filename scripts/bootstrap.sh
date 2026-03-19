@@ -210,6 +210,17 @@ chmod 600 /opt/openclaw/.env.tmp
 mv /opt/openclaw/.env.tmp /opt/openclaw/.env
 echo "Secrets written to /opt/openclaw/.env"
 
+echo "Fetching GitHub App private key from Secrets Manager..."
+aws secretsmanager get-secret-value \
+    --secret-id ocs-automation/github-app-key \
+    --region "$REGION" \
+    --query SecretString \
+    --output text > /opt/openclaw/github-app.pem.tmp
+
+chmod 600 /opt/openclaw/github-app.pem.tmp
+mv /opt/openclaw/github-app.pem.tmp /opt/openclaw/github-app.pem
+echo "GitHub App private key written to /opt/openclaw/github-app.pem"
+
 echo "Phase 6 complete."
 
 # ---------------------------------------------------------------------------
