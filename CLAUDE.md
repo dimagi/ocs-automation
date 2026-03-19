@@ -7,7 +7,7 @@ Pulumi (Python) infrastructure for OpenClaw — an EC2-hosted Claude Code automa
 3-layer system:
 1. **Pulumi** (`infra/`) — provisions AWS resources (EC2, EIP, IAM, S3, Secrets Manager)
 2. **EC2 host** — Ubuntu 24.04 LTS, OpenClaw + Postgres + Caddy as systemd services
-3. **Session containers** — ephemeral Docker containers running Claude Code via `acpx`
+3. **ACP sessions** — Claude Code coding agents managed via OpenClaw's ACP system (`acpx` backend)
 
 ## Commands
 
@@ -61,8 +61,7 @@ op run --env-file=.pulumi.env -- pulumi config set domain <host>
 | `scripts/backup-to-s3.sh` | Backup OpenClaw config + Postgres to S3 |
 | `scripts/restore-from-s3.sh` | Restore from latest S3 backup |
 | `openclaw/Caddyfile` | Caddy reverse proxy config (auto TLS) |
-| `openclaw/skills/ocs/skill.json` | OpenClaw skill triggers (Slack, GitHub, cron) |
-| `openclaw/skills/ocs/session-manager.sh` | Launches session containers |
+| `openclaw/skills/claude-code/SKILL.md` | Claude Code ACP skill — lifecycle management |
 | `session/Dockerfile` | Session container image (Claude Code + acpx + uv) |
 | `session/entrypoint.sh` | Session startup: clone repos, migrate, run acpx |
 
@@ -71,10 +70,9 @@ op run --env-file=.pulumi.env -- pulumi config set domain <host>
 - **Bootstrap is idempotent** — safe to re-run. Full rebuild: `pulumi destroy && pulumi up`.
 - **`__DOMAIN__` is a template variable**: `infra/ec2.py` substitutes it at deploy time. Do not run `bootstrap.sh` directly; it will fail if the literal string is present.
 - **Secrets must be set manually**: Pulumi creates empty Secrets Manager entries. You must `put-secret-value` after first deploy before OpenClaw will start correctly.
-- **Postgres listens on localhost + Docker bridge (172.17.0.1)**. Session containers connect via `host.docker.internal`.
+- **Postgres listens on localhost**. ACP sessions (Claude Code) connect directly since they run on the host.
 - **Default region**: `ap-southeast-2` — set explicitly in Pulumi config if deploying elsewhere.
 - **Pulumi secrets via 1Password**: all Pulumi commands require `op run --env-file=.pulumi.env --` prefix to inject `PULUMI_BACKEND_URL` and `PULUMI_CONFIG_PASSPHRASE` from 1Password. See `.pulumi.env` for the item reference.
-- **Task prompts via file**: Session containers read `TASK_PROMPT` from `/workspace/task-prompt.txt`, not an env var.
 
 ## Environment Setup
 
