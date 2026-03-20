@@ -77,10 +77,12 @@ COMMAND_ID=$(aws ssm send-command \
         \"aws secretsmanager get-secret-value --secret-id ocs-automation/openclaw-env --region $REGION --query SecretString --output text > /opt/openclaw/.env.tmp\",
         \"chmod 600 /opt/openclaw/.env.tmp\",
         \"mv /opt/openclaw/.env.tmp /opt/openclaw/.env\",
+        \"chown openclaw:openclaw /opt/openclaw/.env\",
         \"echo '>>> Pulling GitHub App key from Secrets Manager...'\",
         \"aws secretsmanager get-secret-value --secret-id ocs-automation/github-app-key --region $REGION --query SecretString --output text > /opt/openclaw/github-app.pem.tmp\",
         \"chmod 600 /opt/openclaw/github-app.pem.tmp\",
         \"mv /opt/openclaw/github-app.pem.tmp /opt/openclaw/github-app.pem\",
+        \"chown openclaw:openclaw /opt/openclaw/github-app.pem\",
         \"echo '>>> Restarting OpenClaw gateway...'\",
         \"systemctl restart openclaw-gateway\",
         \"echo '>>> Deploy complete on instance'\"
