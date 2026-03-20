@@ -61,9 +61,37 @@ def _step(msg: str):
     print(f"{_PREFIX} {_DIM}{msg}{_RESET}")
 
 
+_aws_auth_checked = False
+
+
+def _ensure_aws_auth(c: Context):
+    """Check AWS credentials are valid; run SSO login if needed."""
+    global _aws_auth_checked
+    if _aws_auth_checked:
+        return
+    _print_profile_notice()
+    result = c.run(
+        "aws sts get-caller-identity --output json", hide=True, warn=True
+    )
+    if result.ok:
+        data = json.loads(result.stdout)
+        _step(f"Authenticated as {data.get('Arn', 'unknown')}")
+        _aws_auth_checked = True
+        return
+    _warn("AWS credentials expired or missing — starting SSO login...")
+    sso_result = c.run(
+        f"aws sso login --profile {os.environ['AWS_PROFILE']}", pty=True, warn=True
+    )
+    if sso_result.failed:
+        _error("SSO login failed. Cannot proceed without valid AWS credentials.")
+        sys.exit(1)
+    _success("SSO login successful.")
+    _aws_auth_checked = True
+
+
 def _pulumi_output(c: Context, key: str) -> str:
     """Get a single Pulumi stack output value."""
-    _print_profile_notice()
+    _ensure_aws_auth(c)
     result = c.run(f"{OP_PREFIX} pulumi stack output {key}", hide=True, warn=True)
     if result.failed:
         _error(f"Failed to get pulumi output '{key}'. Is the stack initialized?")
@@ -83,7 +111,7 @@ def _instance_id(c: Context) -> str:
 @task(help={"yes": "Skip confirmation prompt"})
 def up(c, yes=False):
     """Deploy or update infrastructure via Pulumi."""
-    _print_profile_notice()
+    _ensure_aws_auth(c)
     flag = " --yes" if yes else ""
     c.run(f"{OP_PREFIX} pulumi up{flag}", pty=True)
     _warn(
@@ -95,14 +123,14 @@ def up(c, yes=False):
 @task
 def outputs(c):
     """Show Pulumi stack outputs."""
-    _print_profile_notice()
+    _ensure_aws_auth(c)
     c.run(f"{OP_PREFIX} pulumi stack output", pty=True)
 
 
 @task
 def preview(c):
     """Preview infrastructure changes without applying."""
-    _print_profile_notice()
+    _ensure_aws_auth(c)
     c.run(f"{OP_PREFIX} pulumi preview", pty=True)
 
 
@@ -239,7 +267,7 @@ def restart(c):
 @task(help={"env_file": "Path to .env.prod file (default: .env.prod)"})
 def push_secrets(c, env_file=".env.prod"):
     """Upload .env.prod to AWS Secrets Manager."""
-    _print_profile_notice()
+    _ensure_aws_auth(c)
     quoted_file = shlex.quote(env_file)
     c.run(
         f"aws secretsmanager put-secret-value"
@@ -254,7 +282,7 @@ def push_secrets(c, env_file=".env.prod"):
 @task(help={"pem_file": "Path to GitHub App PEM file"})
 def push_github_key(c, pem_file):
     """Upload GitHub App private key to AWS Secrets Manager."""
-    _print_profile_notice()
+    _ensure_aws_auth(c)
     quoted_file = shlex.quote(pem_file)
     c.run(
         f"aws secretsmanager put-secret-value"
