@@ -83,6 +83,8 @@ COMMAND_ID=$(aws ssm send-command \
         \"chmod 600 /opt/openclaw/github-app.pem.tmp\",
         \"mv /opt/openclaw/github-app.pem.tmp /opt/openclaw/github-app.pem\",
         \"chown openclaw:openclaw /opt/openclaw/github-app.pem\",
+        \"echo '>>> Running openclaw doctor --fix...'\",
+        \"sudo -u openclaw bash -lc 'OPENCLAW_HOME=/opt/openclaw openclaw doctor --fix' || true\",
         \"echo '>>> Restarting OpenClaw gateway...'\",
         \"systemctl restart openclaw-gateway\",
         \"echo '>>> Deploy complete on instance'\"

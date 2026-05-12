@@ -240,6 +240,9 @@ fi
 # Run openclaw setup to initialize .openclaw directory structure
 OPENCLAW_HOME=/opt/openclaw openclaw setup --non-interactive 2>/dev/null || true
 
+# Install the official acpx plugin (idempotent — no-op if already installed)
+OPENCLAW_HOME=/opt/openclaw openclaw plugins install @openclaw/acpx
+
 # Create base config if not present
 OC_CONFIG="/opt/openclaw/.openclaw/openclaw.json"
 if [ ! -f "$OC_CONFIG" ]; then
