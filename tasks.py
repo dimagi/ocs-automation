@@ -70,18 +70,14 @@ def _ensure_aws_auth(c: Context):
     if _aws_auth_checked:
         return
     _print_profile_notice()
-    result = c.run(
-        "aws sts get-caller-identity --output json", hide=True, warn=True
-    )
+    result = c.run("aws sts get-caller-identity --output json", hide=True, warn=True)
     if result.ok:
         data = json.loads(result.stdout)
         _step(f"Authenticated as {data.get('Arn', 'unknown')}")
         _aws_auth_checked = True
         return
     _warn("AWS credentials expired or missing — starting SSO login...")
-    sso_result = c.run(
-        f"aws sso login --profile {os.environ['AWS_PROFILE']}", pty=True, warn=True
-    )
+    sso_result = c.run(f"aws sso login --profile {os.environ['AWS_PROFILE']}", pty=True, warn=True)
     if sso_result.failed:
         _error("SSO login failed. Cannot proceed without valid AWS credentials.")
         sys.exit(1)
@@ -259,6 +255,24 @@ def restart(c):
     _success("Gateway restarted.")
 
 
+@task(help={"version": "OpenClaw version to install (default: latest)"})
+def upgrade(c, version="latest"):
+    """Upgrade OpenClaw on the instance and restart the gateway."""
+    instance_id = _instance_id(c)
+    pkg = f"openclaw@{shlex.quote(version)}"
+    _info(f"Upgrading OpenClaw to {_BOLD}{version}{_RESET} on {_BOLD}{instance_id}{_RESET}...")
+    _ssm_run(
+        c,
+        instance_id,
+        f"npm install -g {pkg}"
+        " && OC_MODULE_DIR=$(npm root -g)/openclaw"
+        ' && [ -d "$OC_MODULE_DIR" ] && chown -R openclaw:openclaw "$OC_MODULE_DIR"'
+        " && openclaw --version"
+        " && systemctl restart openclaw-gateway",
+    )
+    _success("Upgrade complete and gateway restarted.")
+
+
 # ---------------------------------------------------------------------------
 # Secrets
 # ---------------------------------------------------------------------------
@@ -272,7 +286,7 @@ def push_secrets(c, env_file=".env.prod"):
     c.run(
         f"aws secretsmanager put-secret-value"
         f" --secret-id ocs-automation/openclaw-env"
-        f" --secret-string \"$(cat {quoted_file})\""
+        f' --secret-string "$(cat {quoted_file})"'
         f" --region {REGION}",
         pty=True,
     )
@@ -287,7 +301,7 @@ def push_github_key(c, pem_file):
     c.run(
         f"aws secretsmanager put-secret-value"
         f" --secret-id ocs-automation/github-app-key"
-        f" --secret-string \"$(cat {quoted_file})\""
+        f' --secret-string "$(cat {quoted_file})"'
         f" --region {REGION}",
         pty=True,
     )
