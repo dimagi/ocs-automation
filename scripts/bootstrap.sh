@@ -240,19 +240,40 @@ fi
 # Run openclaw setup to initialize .openclaw directory structure
 OPENCLAW_HOME=/opt/openclaw openclaw setup --non-interactive 2>/dev/null || true
 
-# Install the official acpx plugin (idempotent — no-op if already installed)
+# Install the official plugins (idempotent — no-op if already installed)
 OPENCLAW_HOME=/opt/openclaw openclaw plugins install @openclaw/acpx
+OPENCLAW_HOME=/opt/openclaw openclaw plugins install @openclaw/slack
 
-# Create base config if not present
+# Create base config if not present.
+# Note: doctor --fix (run in deploy.sh) populates plugins.entries for slack,
+# memory-core, anthropic, openai, codex etc. — keep this seed minimal.
 OC_CONFIG="/opt/openclaw/.openclaw/openclaw.json"
 if [ ! -f "$OC_CONFIG" ]; then
     mkdir -p /opt/openclaw/.openclaw
     AUTH_TOKEN=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
     cat > "$OC_CONFIG" << OCJSON
 {
+  "acp": {
+    "enabled": true,
+    "dispatch": { "enabled": true },
+    "backend": "acpx",
+    "defaultAgent": "claude",
+    "allowedAgents": ["claude"],
+    "maxConcurrentSessions": 4
+  },
   "agents": {
     "defaults": {
-      "workspace": "/opt/openclaw/.openclaw/workspace"
+      "model": {
+        "primary": "anthropic/claude-sonnet-4-6",
+        "fallbacks": ["openai/gpt-5.1-codex"]
+      },
+      "models": {
+        "anthropic/claude-sonnet-4-6": { "alias": "sonnet" },
+        "openai/gpt-5.1-codex": { "alias": "GPT" }
+      },
+      "workspace": "/opt/openclaw/.openclaw/workspace",
+      "maxConcurrent": 4,
+      "subagents": { "maxConcurrent": 8 }
     },
     "list": [
       {
@@ -269,13 +290,39 @@ if [ ! -f "$OC_CONFIG" ]; then
       }
     ]
   },
-  "acp": {
-    "enabled": true,
-    "dispatch": { "enabled": true },
-    "backend": "acpx",
-    "defaultAgent": "claude",
-    "allowedAgents": ["claude"],
-    "maxConcurrentSessions": 4
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto",
+    "restart": true,
+    "ownerDisplay": "raw"
+  },
+  "session": {
+    "dmScope": "per-channel-peer"
+  },
+  "channels": {
+    "slack": {
+      "enabled": true,
+      "mode": "socket",
+      "webhookPath": "/slack/events",
+      "userTokenReadOnly": true,
+      "appToken": { "source": "env", "provider": "default", "id": "SLACK_APP_TOKEN" },
+      "botToken": { "source": "env", "provider": "default", "id": "SLACK_BOT_TOKEN" },
+      "dm": { "enabled": true },
+      "dmPolicy": "pairing",
+      "groupPolicy": "allowlist",
+      "streaming": {
+        "mode": "progress",
+        "progress": {
+          "toolProgress": true,
+          "commandText": "status"
+        }
+      },
+      "channels": {}
+    }
+  },
+  "messages": {
+    "ackReactionScope": "group-mentions",
+    "groupChat": { "visibleReplies": "message_tool" }
   },
   "plugins": {
     "entries": {
@@ -285,17 +332,21 @@ if [ ! -f "$OC_CONFIG" ]; then
           "permissionMode": "approve-all",
           "nonInteractivePermissions": "fail"
         }
+      },
+      "slack": {
+        "enabled": true,
+        "config": {}
       }
     }
   },
   "gateway": {
     "mode": "local",
-    "auth": {
-      "token": "${AUTH_TOKEN}"
+    "bind": "loopback",
+    "controlUi": {
+      "allowedOrigins": ["https://${DOMAIN}"]
     },
-    "remote": {
-      "token": "${AUTH_TOKEN}"
-    },
+    "auth": { "token": "${AUTH_TOKEN}" },
+    "remote": { "token": "${AUTH_TOKEN}" },
     "trustedProxies": ["127.0.0.1"]
   }
 }
