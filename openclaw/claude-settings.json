@@ -1,0 +1,14 @@
+{
+  "extraKnownMarketplaces": {
+    "dimagi-claude-workflows": {
+      "source": {
+        "source": "github",
+        "repo": "dimagi/dimagi-claude-workflows"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "dev-utils@dimagi-claude-workflows": true,
+    "superpowers@dimagi-claude-workflows": true
+  }
+}

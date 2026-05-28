@@ -179,6 +179,13 @@ if [ -d /opt/ocs-automation/openclaw/skills ]; then
     cp -r /opt/ocs-automation/openclaw/skills/* /opt/openclaw/.openclaw/skills/
 fi
 
+# Install Claude Code settings (marketplaces + enabled plugins) for the openclaw user
+if [ -f /opt/ocs-automation/openclaw/claude-settings.json ]; then
+    mkdir -p /opt/openclaw/.claude
+    cp /opt/ocs-automation/openclaw/claude-settings.json /opt/openclaw/.claude/settings.json
+    chown -R openclaw:openclaw /opt/openclaw/.claude
+fi
+
 # Copy and configure Caddyfile
 if [ -f /opt/ocs-automation/openclaw/Caddyfile ]; then
     cp /opt/ocs-automation/openclaw/Caddyfile /etc/caddy/Caddyfile
