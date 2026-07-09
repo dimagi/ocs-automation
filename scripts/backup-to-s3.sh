@@ -8,9 +8,12 @@ PREFIX="snapshots/${TIMESTAMP}"
 
 echo "Backing up to s3://${BUCKET}/${PREFIX}/"
 
-# OpenClaw state (config, memory, workspace, agents — exclude logs and identity)
+# OpenClaw state (config, memory, agents) — exclude logs, identity, the
+# reinstallable npm tooling, and session transcripts (large + regenerable;
+# session_* DBs are likewise excluded from the Postgres dump below).
 aws s3 sync /opt/openclaw/.openclaw/ "s3://${BUCKET}/${PREFIX}/openclaw/" \
-    --exclude "logs/*" --exclude "identity/*"
+    --exclude "logs/*" --exclude "identity/*" \
+    --exclude "npm/*" --exclude "agents/*/sessions/*"
 
 # Postgres dump (non-session databases only)
 sudo -u postgres pg_dumpall --exclude-database='session_*' --format=plain \
