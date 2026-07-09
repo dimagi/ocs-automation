@@ -1,6 +1,7 @@
 # tasks.py
 # Invoke tasks for ocs-automation ops.
 # Usage: uv run inv <task>    or    uv run inv --list
+import base64
 import json
 import os
 import shlex
@@ -380,7 +381,10 @@ def prune_backups(c, keep=14, dry_run=False):
     instance_id = _instance_id(c)
     _step(f"Pruning backups (keep={keep}{', dry-run' if dry_run else ''})...")
     script = _PRUNE_SCRIPT.format(bucket=BUCKET, keep=keep, dry="1" if dry_run else "0")
-    _ssm_run(c, instance_id, script)
+    # SSM collapses newlines in a multi-line command, which breaks shell
+    # control flow; ship the script base64-encoded and decode it on the host.
+    payload = base64.b64encode(script.encode()).decode()
+    _ssm_run(c, instance_id, f"echo {payload} | base64 -d | sh")
     _success("Dry-run complete." if dry_run else "Prune complete.")
 
 
