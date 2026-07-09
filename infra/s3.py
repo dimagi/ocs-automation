@@ -29,7 +29,21 @@ def create_artifacts_bucket() -> aws.s3.BucketV2:
                 noncurrent_version_expiration=aws.s3.BucketLifecycleConfigurationV2RuleNoncurrentVersionExpirationArgs(
                     noncurrent_days=30,
                 ),
-            )
+            ),
+            # Expire timestamped backup snapshots after 30 days. Snapshots live
+            # under snapshots/; the DR pointer at backups/latest/ is deliberately
+            # outside this prefix so it is never expired (bootstrap restores from
+            # it on every launch).
+            aws.s3.BucketLifecycleConfigurationV2RuleArgs(
+                id="expire-old-snapshots",
+                status="Enabled",
+                filter=aws.s3.BucketLifecycleConfigurationV2RuleFilterArgs(
+                    prefix="snapshots/",
+                ),
+                expiration=aws.s3.BucketLifecycleConfigurationV2RuleExpirationArgs(
+                    days=30,
+                ),
+            ),
         ],
     )
 

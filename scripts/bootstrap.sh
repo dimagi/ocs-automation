@@ -403,10 +403,16 @@ BUCKET="ocs-automation-prod-artifacts"
 if aws s3 ls "s3://${BUCKET}/backups/latest/" --region "$REGION" 2>/dev/null; then
     echo "Restoring from S3 backup (s3://${BUCKET}/backups/latest/)..."
 
+    # Stop the gateway so it does not crash-loop against a half-restored config dir.
+    systemctl stop openclaw-gateway 2>/dev/null || true
+
     # Restore OpenClaw state
     aws s3 sync "s3://${BUCKET}/backups/latest/openclaw/" /opt/openclaw/.openclaw/ \
         --region "$REGION"
     chmod 600 /opt/openclaw/.openclaw/openclaw.json 2>/dev/null || true
+
+    # The sync runs as root; hand ownership back to the openclaw user before start.
+    chown -R openclaw:openclaw /opt/openclaw
 
     # Restore Postgres dumps if they exist
     DUMP="/tmp/openclaw-pg-restore.sql"

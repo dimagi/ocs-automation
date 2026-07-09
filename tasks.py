@@ -322,14 +322,64 @@ def backup(c):
     _success("Backup complete.")
 
 
-@task(help={"timestamp": "Backup timestamp to restore (default: latest)"})
+@task(help={"timestamp": "Snapshot timestamp to restore (default: latest)"})
 def restore(c, timestamp="latest"):
     """Restore from S3 backup."""
     instance_id = _instance_id(c)
     _step(f"Restoring from backup ({timestamp})...")
-    cmd = f"bash /opt/ocs-automation/scripts/restore-from-s3.sh backups/{timestamp}"
+    prefix = "backups/latest" if timestamp == "latest" else f"snapshots/{timestamp}"
+    cmd = f"bash /opt/ocs-automation/scripts/restore-from-s3.sh {prefix}"
     _ssm_run(c, instance_id, cmd)
     _success("Restore complete.")
+
+
+_PRUNE_SCRIPT = """\
+set -euo pipefail
+BUCKET="{bucket}"
+KEEP={keep}
+DRY={dry}
+mapfile -t SNAPS < <(aws s3 ls "s3://${{BUCKET}}/snapshots/" \
+    | awk '/ PRE / {{print $2}}' | sort)
+TOTAL=${{#SNAPS[@]}}
+if [ "$TOTAL" -le "$KEEP" ]; then
+    echo "Only ${{TOTAL}} snapshot(s); nothing to prune (keep=${{KEEP}})."
+    exit 0
+fi
+DELETE=("${{SNAPS[@]:0:$((TOTAL - KEEP))}}")
+echo "Found ${{TOTAL}} snapshots; keeping newest ${{KEEP}}, removing ${{#DELETE[@]}}."
+for p in "${{DELETE[@]}}"; do
+    if [ "$DRY" = "1" ]; then
+        echo "[dry-run] would delete s3://${{BUCKET}}/snapshots/${{p}}"
+    else
+        echo "Deleting s3://${{BUCKET}}/snapshots/${{p}}"
+        aws s3 rm "s3://${{BUCKET}}/snapshots/${{p}}" --recursive
+    fi
+done
+echo "Prune complete."
+"""
+
+
+@task(
+    help={
+        "keep": "Number of most-recent snapshots to keep (default 14)",
+        "dry-run": "List what would be deleted without deleting",
+    }
+)
+def prune_backups(c, keep=14, dry_run=False):
+    """Delete old timestamped snapshots under snapshots/, keeping the newest N.
+
+    Complements the S3 lifecycle rule (30-day expiry) by reclaiming storage
+    immediately and enforcing a count-based floor. Only touches snapshots/;
+    the DR pointer at backups/latest/ is a separate prefix and is never touched.
+    """
+    if keep < 1:
+        _error("--keep must be at least 1.")
+        sys.exit(1)
+    instance_id = _instance_id(c)
+    _step(f"Pruning backups (keep={keep}{', dry-run' if dry_run else ''})...")
+    script = _PRUNE_SCRIPT.format(bucket=BUCKET, keep=keep, dry="1" if dry_run else "0")
+    _ssm_run(c, instance_id, script)
+    _success("Dry-run complete." if dry_run else "Prune complete.")
 
 
 # ---------------------------------------------------------------------------

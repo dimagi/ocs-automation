@@ -4,7 +4,7 @@ set -euo pipefail
 # Determine bucket from env or use default
 BUCKET="${BACKUP_BUCKET:-ocs-automation-prod-artifacts}"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-PREFIX="backups/${TIMESTAMP}"
+PREFIX="snapshots/${TIMESTAMP}"
 
 echo "Backing up to s3://${BUCKET}/${PREFIX}/"
 
@@ -20,7 +20,9 @@ if [ -f /tmp/openclaw-pg-backup.sql ]; then
     rm /tmp/openclaw-pg-backup.sql
 fi
 
-# Update latest pointer
+# Update latest pointer (the DR restore source read by bootstrap on launch).
+# latest/ lives under backups/, outside the snapshots/ expiry rule, so it is
+# never expired regardless of backup cadence.
 aws s3 sync "s3://${BUCKET}/${PREFIX}/" "s3://${BUCKET}/backups/latest/" --delete
 
 echo "Backup complete: s3://${BUCKET}/${PREFIX}/"

@@ -55,7 +55,7 @@ def create_instance_profile(artifacts_bucket_name: pulumi.Output) -> aws.iam.Ins
             "Version": "2012-10-17",
             "Statement": [{
                 "Effect": "Allow",
-                "Action": ["s3:PutObject", "s3:GetObject", "s3:ListBucket"],
+                "Action": ["s3:PutObject", "s3:GetObject", "s3:ListBucket", "s3:DeleteObject"],
                 "Resource": [
                     f"arn:aws:s3:::{bucket_name}",
                     f"arn:aws:s3:::{bucket_name}/*",
