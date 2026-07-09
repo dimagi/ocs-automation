@@ -333,26 +333,28 @@ def restore(c, timestamp="latest"):
     _success("Restore complete.")
 
 
+# POSIX sh — SSM's AWS-RunShellScript runs this under /bin/sh (dash), so no
+# bashisms (mapfile, arrays, process substitution, pipefail).
 _PRUNE_SCRIPT = """\
-set -euo pipefail
+set -eu
 BUCKET="{bucket}"
 KEEP={keep}
 DRY={dry}
-mapfile -t SNAPS < <(aws s3 ls "s3://${{BUCKET}}/snapshots/" \
-    | awk '/ PRE / {{print $2}}' | sort)
-TOTAL=${{#SNAPS[@]}}
+SNAPS=$(aws s3 ls "s3://$BUCKET/snapshots/" | awk '/ PRE / {{print $2}}' | sort)
+TOTAL=$(printf '%s\\n' "$SNAPS" | grep -c . || true)
 if [ "$TOTAL" -le "$KEEP" ]; then
-    echo "Only ${{TOTAL}} snapshot(s); nothing to prune (keep=${{KEEP}})."
+    echo "Only $TOTAL snapshot(s); nothing to prune (keep=$KEEP)."
     exit 0
 fi
-DELETE=("${{SNAPS[@]:0:$((TOTAL - KEEP))}}")
-echo "Found ${{TOTAL}} snapshots; keeping newest ${{KEEP}}, removing ${{#DELETE[@]}}."
-for p in "${{DELETE[@]}}"; do
+NDELETE=$((TOTAL - KEEP))
+echo "Found $TOTAL snapshots; keeping newest $KEEP, removing $NDELETE."
+printf '%s\\n' "$SNAPS" | head -n "$NDELETE" | while IFS= read -r p; do
+    [ -n "$p" ] || continue
     if [ "$DRY" = "1" ]; then
-        echo "[dry-run] would delete s3://${{BUCKET}}/snapshots/${{p}}"
+        echo "[dry-run] would delete s3://$BUCKET/snapshots/$p"
     else
-        echo "Deleting s3://${{BUCKET}}/snapshots/${{p}}"
-        aws s3 rm "s3://${{BUCKET}}/snapshots/${{p}}" --recursive
+        echo "Deleting s3://$BUCKET/snapshots/$p"
+        aws s3 rm "s3://$BUCKET/snapshots/$p" --recursive
     fi
 done
 echo "Prune complete."
