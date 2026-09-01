@@ -214,18 +214,10 @@ openclaw config get
 openclaw doctor
 ```
 
-## Backup & Restore
+## State & Durability
 
-Backups run automatically every 4 hours via systemd timer. Manual operations:
-
-```bash
-# Trigger a backup now
-uv run inv backup
-
-# Restore from latest S3 backup
-uv run inv restore
-
-# On the instance directly:
-/opt/ocs-automation/scripts/backup-to-s3.sh
-/opt/ocs-automation/scripts/restore-from-s3.sh
-```
+There are no backups. Instance state (OpenClaw config, pairings, Postgres) lives
+only on the instance's root volume, which is deleted on termination. Because
+`user_data_replace_on_change=True`, any edit to `scripts/bootstrap.sh` replaces
+the instance on the next `uv run inv up` and that state is gone — re-pair Slack
+and re-push secrets after a rebuild.

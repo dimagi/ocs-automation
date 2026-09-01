@@ -394,46 +394,9 @@ systemctl restart openclaw-gateway
 echo "Phase 7 complete."
 
 # ---------------------------------------------------------------------------
-# Phase 8 — S3 restore (if backup exists)
+# Phase 8 — Build session container image
 # ---------------------------------------------------------------------------
-echo "=== Phase 8: S3 restore (if backup exists) ==="
-
-BUCKET="ocs-automation-prod-artifacts"
-
-if aws s3 ls "s3://${BUCKET}/backups/latest/" --region "$REGION" 2>/dev/null; then
-    echo "Restoring from S3 backup (s3://${BUCKET}/backups/latest/)..."
-
-    # Stop the gateway so it does not crash-loop against a half-restored config dir.
-    systemctl stop openclaw-gateway 2>/dev/null || true
-
-    # Restore OpenClaw state
-    aws s3 sync "s3://${BUCKET}/backups/latest/openclaw/" /opt/openclaw/.openclaw/ \
-        --region "$REGION"
-    chmod 600 /opt/openclaw/.openclaw/openclaw.json 2>/dev/null || true
-
-    # The sync runs as root; hand ownership back to the openclaw user before start.
-    chown -R openclaw:openclaw /opt/openclaw
-
-    # Restore Postgres dumps if they exist
-    DUMP="/tmp/openclaw-pg-restore.sql"
-    if aws s3 cp "s3://${BUCKET}/backups/latest/postgres/openclaw-pg-backup.sql" "$DUMP" --region "$REGION" 2>/dev/null; then
-        sudo -u postgres psql < "$DUMP" || echo "Postgres restore encountered errors (non-fatal)."
-        rm -f "$DUMP"
-        echo "Postgres restored."
-    fi
-
-    systemctl restart openclaw-gateway
-    echo "S3 restore complete."
-else
-    echo "No S3 backup found, skipping restore."
-fi
-
-echo "Phase 8 complete."
-
-# ---------------------------------------------------------------------------
-# Phase 9 — Build session container image
-# ---------------------------------------------------------------------------
-echo "=== Phase 9: Build session container image ==="
+echo "=== Phase 8: Build session container image ==="
 
 if [ -f /opt/ocs-automation/session/Dockerfile ]; then
     docker build -t ocs-session /opt/ocs-automation/session/
@@ -442,40 +405,7 @@ else
     echo "No session Dockerfile found, skipping build."
 fi
 
-echo "Phase 9 complete."
-
-# ---------------------------------------------------------------------------
-# Phase 10 — S3 backup timer
-# ---------------------------------------------------------------------------
-echo "=== Phase 10: S3 backup timer ==="
-
-# Create systemd service for backup (idempotent — always overwrite)
-cat > /etc/systemd/system/openclaw-backup.service << 'EOF'
-[Unit]
-Description=OpenClaw S3 Backup
-
-[Service]
-Type=oneshot
-ExecStart=/opt/ocs-automation/scripts/backup-to-s3.sh
-EOF
-
-# Create systemd timer (idempotent — always overwrite)
-cat > /etc/systemd/system/openclaw-backup.timer << 'EOF'
-[Unit]
-Description=OpenClaw S3 Backup Timer
-
-[Timer]
-OnCalendar=*-*-* 00/4:00:00
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-EOF
-
-systemctl daemon-reload
-systemctl enable --now openclaw-backup.timer
-
-echo "Phase 10 complete."
+echo "Phase 8 complete."
 
 # ---------------------------------------------------------------------------
 echo "=== Bootstrap completed at $(date) ==="

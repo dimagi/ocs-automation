@@ -23,7 +23,7 @@ Pulumi (infra/)
 infra/          Pulumi resource definitions (EC2, IAM, S3, secrets)
 openclaw/       Caddyfile, skills, config (deployed to /opt/openclaw/)
   skills/ocs/   OpenClaw skill: Slack/GitHub triggers, session-manager.sh
-scripts/        bootstrap.sh (idempotent), deploy.sh, backup/restore
+scripts/        bootstrap.sh (idempotent), deploy.sh
 session/        Session container Dockerfile and entrypoint
 docs/           Plans and specs
 ```

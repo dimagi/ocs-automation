@@ -34,10 +34,6 @@ uv run inv health                  # Gateway health check
 uv run inv push-secrets            # Upload .env.prod to Secrets Manager
 uv run inv push-github-key --pem-file=key.pem
 
-# Backup & Restore
-uv run inv backup                  # Backup config + DB to S3
-uv run inv restore                 # Restore from latest S3 backup
-
 # Lint
 uv run inv lint                    # Check only
 uv run inv fmt                     # Auto-fix + format
@@ -58,8 +54,6 @@ op run --env-file=.pulumi.env -- pulumi config set domain <host>
 | `infra/secrets.py` | Secrets Manager placeholders (values set manually) |
 | `scripts/bootstrap.sh` | Idempotent EC2 setup (re-runnable) |
 | `scripts/deploy.sh` | Config/skills sync to running instance via SSM |
-| `scripts/backup-to-s3.sh` | Backup OpenClaw config + Postgres to S3 |
-| `scripts/restore-from-s3.sh` | Restore from latest S3 backup |
 | `openclaw/Caddyfile` | Caddy reverse proxy config (auto TLS) |
 | `openclaw/skills/claude-code/SKILL.md` | Claude Code ACP skill — lifecycle management |
 | `session/Dockerfile` | Session container image (Claude Code + acpx + uv) |
@@ -68,6 +62,7 @@ op run --env-file=.pulumi.env -- pulumi config set domain <host>
 ## Gotchas
 
 - **Bootstrap is idempotent** — safe to re-run. Full rebuild: `pulumi destroy && pulumi up`.
+- **No backups** — instance state (config, pairings, Postgres) is ephemeral. Editing `bootstrap.sh` triggers `user_data_replace_on_change`, replacing the instance and losing that state; re-pair Slack and re-push secrets afterwards.
 - **`__DOMAIN__` is a template variable**: `infra/ec2.py` substitutes it at deploy time. Do not run `bootstrap.sh` directly; it will fail if the literal string is present.
 - **Secrets must be set manually**: Pulumi creates empty Secrets Manager entries. You must `put-secret-value` after first deploy before OpenClaw will start correctly.
 - **Postgres listens on localhost**. ACP sessions (Claude Code) connect directly since they run on the host.
