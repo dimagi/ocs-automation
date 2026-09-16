@@ -209,7 +209,7 @@ def logs(c, follow=False, lines=100):
     instance_id = _instance_id(c)
     if follow:
         _step("Tailing gateway logs (Ctrl+C to stop)...")
-        cmd = "sudo journalctl -u openclaw-gateway -f --no-pager"
+        cmd = "sudo openclaw-user journalctl --user-unit openclaw-gateway -f --no-pager"
         c.run(
             f"aws ssm start-session --target {shlex.quote(instance_id)}"
             f" --region {REGION}"
@@ -219,7 +219,11 @@ def logs(c, follow=False, lines=100):
         )
     else:
         _step("Fetching gateway logs...")
-        _ssm_run(c, instance_id, f"journalctl -u openclaw-gateway -n {lines} --no-pager")
+        _ssm_run(
+            c,
+            instance_id,
+            f"openclaw-user journalctl --user-unit openclaw-gateway -n {lines} --no-pager",
+        )
 
 
 @task
@@ -230,7 +234,8 @@ def status(c):
     _ssm_run(
         c,
         instance_id,
-        "systemctl status openclaw-gateway caddy postgresql --no-pager -l 2>/dev/null; "
+        "openclaw-user systemctl --user status openclaw-gateway --no-pager -l 2>/dev/null; "
+        "systemctl status caddy postgresql --no-pager -l 2>/dev/null; "
         "echo '--- Sessions ---'; "
         "docker ps --filter name=session"
         " --format 'table {{{{.Names}}}}\\t{{{{.Status}}}}\\t{{{{.RunningFor}}}}'",
@@ -242,7 +247,7 @@ def health(c):
     """Run the gateway health check."""
     instance_id = _instance_id(c)
     _step("Running health check...")
-    _ssm_run(c, instance_id, "openclaw doctor")
+    _ssm_run(c, instance_id, "openclaw-user openclaw doctor")
 
 
 @task
@@ -250,7 +255,7 @@ def restart(c):
     """Restart the openclaw-gateway service."""
     instance_id = _instance_id(c)
     _step("Restarting openclaw-gateway...")
-    _ssm_run(c, instance_id, "systemctl restart openclaw-gateway")
+    _ssm_run(c, instance_id, "openclaw-user systemctl --user restart openclaw-gateway")
     _success("Gateway restarted.")
 
 
@@ -267,7 +272,7 @@ def upgrade(c, version="latest"):
         " && OC_MODULE_DIR=$(npm root -g)/openclaw"
         ' && [ -d "$OC_MODULE_DIR" ] && chown -R openclaw:openclaw "$OC_MODULE_DIR"'
         " && openclaw --version"
-        " && systemctl restart openclaw-gateway",
+        " && openclaw-user systemctl --user restart openclaw-gateway",
     )
     _success("Upgrade complete and gateway restarted.")
 

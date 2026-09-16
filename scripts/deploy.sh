@@ -87,11 +87,11 @@ COMMAND_ID=$(aws ssm send-command \
         \"mv /opt/openclaw/github-app.pem.tmp /opt/openclaw/github-app.pem\",
         \"chown openclaw:openclaw /opt/openclaw/github-app.pem\",
         \"echo '>>> Running openclaw doctor --fix...'\",
-        \"sudo -u openclaw bash -lc 'OPENCLAW_HOME=/opt/openclaw openclaw doctor --fix' || true\",
+        \"openclaw-user openclaw doctor --fix || true\",
         \"echo '>>> Patching Slack channel policy...'\",
         \"/opt/ocs-automation/scripts/patch-slack-policy.sh\",
         \"echo '>>> Restarting OpenClaw gateway...'\",
-        \"systemctl restart openclaw-gateway\",
+        \"openclaw-user systemctl --user restart openclaw-gateway\",
         \"echo '>>> Deploy complete on instance'\"
     ]" \
     --query "Command.CommandId" \

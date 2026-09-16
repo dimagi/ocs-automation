@@ -176,19 +176,24 @@ SSH into the instance via SSM:
 aws ssm start-session --target <instance-id> --region <region>
 ```
 
+The gateway is a systemd **user** service owned by the `openclaw` user (lingering
+is enabled so it starts at boot). Use `openclaw-user` to run commands in that
+user's manager context:
+
 **Service status:**
 ```bash
-systemctl status openclaw-gateway postgresql caddy
+openclaw-user systemctl --user status openclaw-gateway
+systemctl status postgresql caddy
 ```
 
 **Gateway logs (live):**
 ```bash
-journalctl -u openclaw-gateway -f
+openclaw-user journalctl --user-unit openclaw-gateway -f
 ```
 
 **Health check:**
 ```bash
-openclaw doctor
+openclaw-user openclaw doctor
 ```
 
 **Session containers** (ephemeral, spun up per task):

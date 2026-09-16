@@ -65,6 +65,7 @@ op run --env-file=.pulumi.env -- pulumi config set domain <host>
 - **No backups** — instance state (config, pairings, Postgres) is ephemeral. Editing `bootstrap.sh` triggers `user_data_replace_on_change`, replacing the instance and losing that state; re-pair Slack and re-push secrets afterwards.
 - **`__DOMAIN__` is a template variable**: `infra/ec2.py` substitutes it at deploy time. Do not run `bootstrap.sh` directly; it will fail if the literal string is present.
 - **Secrets must be set manually**: Pulumi creates empty Secrets Manager entries. You must `put-secret-value` after first deploy before OpenClaw will start correctly.
+- **Gateway is a systemd user service**: `openclaw-gateway` runs under the `openclaw` user manager (lingering enabled), not system-scoped. Control it with `openclaw-user systemctl --user <verb> openclaw-gateway`; logs via `openclaw-user journalctl --user-unit openclaw-gateway`.
 - **Postgres listens on localhost**. ACP sessions (Claude Code) connect directly since they run on the host.
 - **DNS must be updated after rebuild**: `pulumi destroy && pulumi up` allocates a new Elastic IP. You must update the DNS record for the domain (e.g., `agent.openchatstudio.com`) to point to the new EIP, or HTTPS will time out. Check with `uv run inv outputs` and `dig +short <domain>`.
 - **Default region**: `ap-southeast-2` — set explicitly in Pulumi config if deploying elsewhere.

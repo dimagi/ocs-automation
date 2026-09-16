@@ -149,15 +149,38 @@ echo "Phase 3 complete."
 # ---------------------------------------------------------------------------
 echo "=== Phase 4: Directory structure ==="
 
+mkdir -p /opt/openclaw
+mkdir -p /opt/ocs-automation
+mkdir -p /data/sessions
+
 # Create openclaw system user (idempotent)
 id -u openclaw &>/dev/null || useradd --system --create-home --home-dir /opt/openclaw --shell /usr/sbin/nologin openclaw
 
 # Gateway user needs Docker socket access to launch session containers
 usermod -aG docker openclaw
 
-mkdir -p /opt/openclaw
-mkdir -p /opt/ocs-automation
-mkdir -p /data/sessions
+# The gateway runs as a systemd user service; lingering starts the openclaw
+# user manager at boot without a login session.
+loginctl enable-linger openclaw
+
+# Helper for running commands against the openclaw user manager from root, e.g.
+#   openclaw-user systemctl --user restart openclaw-gateway
+#   openclaw-user openclaw doctor
+cat > /usr/local/bin/openclaw-user << 'EOF'
+#!/bin/sh
+set -eu
+exec sudo -u openclaw env \
+    XDG_RUNTIME_DIR="/run/user/$(id -u openclaw)" \
+    OPENCLAW_HOME=/opt/openclaw \
+    "$@"
+EOF
+chmod +x /usr/local/bin/openclaw-user
+
+# Same environment for interactive logins (uv run inv ssh)
+cat > /opt/openclaw/.profile << 'EOF'
+export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+export OPENCLAW_HOME=/opt/openclaw
+EOF
 
 echo "Phase 4 complete."
 
@@ -362,20 +385,17 @@ OCJSON
     echo "Gateway auth token written to ${OC_CONFIG}"
 fi
 
-# Ensure correct ownership
-chown -R openclaw:openclaw /opt/openclaw
-
-# Create systemd unit for openclaw-gateway (idempotent — always overwrite)
-cat > /etc/systemd/system/openclaw-gateway.service << 'EOF'
+# Create the gateway unit as a user unit under the openclaw user
+# (idempotent — always overwrite)
+USER_UNIT_DIR=/opt/openclaw/.config/systemd/user
+mkdir -p "$USER_UNIT_DIR"
+cat > "$USER_UNIT_DIR/openclaw-gateway.service" << 'EOF'
 [Unit]
 Description=OpenClaw Gateway
-After=network.target postgresql.service
-Wants=postgresql.service
+# User units cannot order against system units; Restart covers a late Postgres.
 
 [Service]
 Type=simple
-User=openclaw
-Group=openclaw
 Environment=OPENCLAW_HOME=/opt/openclaw
 WorkingDirectory=/opt/openclaw
 EnvironmentFile=/opt/openclaw/.env
@@ -384,12 +404,28 @@ Restart=on-failure
 RestartSec=5
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 EOF
 
-systemctl daemon-reload
-systemctl enable openclaw-gateway
-systemctl restart openclaw-gateway
+# Ensure correct ownership
+chown -R openclaw:openclaw /opt/openclaw
+
+# Remove the system-scoped unit left by earlier bootstrap versions
+if [ -f /etc/systemd/system/openclaw-gateway.service ]; then
+    systemctl disable --now openclaw-gateway || true
+    rm -f /etc/systemd/system/openclaw-gateway.service
+    systemctl daemon-reload
+fi
+
+# The user manager is started by lingering — wait for it before talking to it
+for _ in $(seq 1 30); do
+    systemctl is-active "user@$(id -u openclaw).service" &>/dev/null && break
+    sleep 1
+done
+
+openclaw-user systemctl --user daemon-reload
+openclaw-user systemctl --user enable openclaw-gateway
+openclaw-user systemctl --user restart openclaw-gateway
 
 echo "Phase 7 complete."
 
