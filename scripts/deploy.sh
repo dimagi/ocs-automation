@@ -86,6 +86,7 @@ COMMAND_ID=$(aws ssm send-command \
         \"chmod 600 /opt/openclaw/github-app.pem.tmp\",
         \"mv /opt/openclaw/github-app.pem.tmp /opt/openclaw/github-app.pem\",
         \"chown openclaw:openclaw /opt/openclaw/github-app.pem\",
+        \"/opt/ocs-automation/scripts/sync-gateway-token.sh\",
         \"echo '>>> Running openclaw doctor --fix...'\",
         \"openclaw-user openclaw doctor --fix || true\",
         \"echo '>>> Patching Slack channel policy...'\",

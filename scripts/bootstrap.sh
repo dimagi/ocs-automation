@@ -278,9 +278,11 @@ OPENCLAW_HOME=/opt/openclaw openclaw plugins install @openclaw/slack
 # Note: doctor --fix (run in deploy.sh) populates plugins.entries for slack,
 # memory-core, anthropic, openai, codex etc. — keep this seed minimal.
 OC_CONFIG="/opt/openclaw/.openclaw/openclaw.json"
+# Gateway token lives outside openclaw.json; the config references it via a file SecretRef.
+GATEWAY_TOKEN_FILE="/opt/openclaw/.openclaw/gateway-token"
+bash /opt/ocs-automation/scripts/sync-gateway-token.sh
 if [ ! -f "$OC_CONFIG" ]; then
     mkdir -p /opt/openclaw/.openclaw
-    AUTH_TOKEN=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
     cat > "$OC_CONFIG" << OCJSON
 {
   "acp": {
@@ -375,14 +377,19 @@ if [ ! -f "$OC_CONFIG" ]; then
     "controlUi": {
       "allowedOrigins": ["https://${DOMAIN}"]
     },
-    "auth": { "token": "${AUTH_TOKEN}" },
-    "remote": { "token": "${AUTH_TOKEN}" },
+    "auth": { "token": { "source": "file", "provider": "gateway", "id": "value" } },
+    "remote": { "token": { "source": "file", "provider": "gateway", "id": "value" } },
     "trustedProxies": ["127.0.0.1"]
+  },
+  "secrets": {
+    "providers": {
+      "gateway": { "source": "file", "path": "${GATEWAY_TOKEN_FILE}", "mode": "singleValue" }
+    }
   }
 }
 OCJSON
     chmod 600 "$OC_CONFIG"
-    echo "Gateway auth token written to ${OC_CONFIG}"
+    echo "OpenClaw config written to ${OC_CONFIG}"
 fi
 
 # Create the gateway unit as a user unit under the openclaw user
