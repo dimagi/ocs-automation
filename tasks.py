@@ -261,18 +261,23 @@ def restart(c):
 
 @task(help={"version": "OpenClaw version to install (default: latest)"})
 def upgrade(c, version="latest"):
-    """Upgrade OpenClaw on the instance and restart the gateway."""
+    """Upgrade OpenClaw on the instance, run Doctor repairs, and restart the gateway."""
     instance_id = _instance_id(c)
     pkg = f"openclaw@{shlex.quote(version)}"
     _info(f"Upgrading OpenClaw to {_BOLD}{version}{_RESET} on {_BOLD}{instance_id}{_RESET}...")
+    # Manual package upgrades need Doctor's state repairs before the new gateway starts,
+    # so run them with the gateway stopped.
     _ssm_run(
         c,
         instance_id,
-        f"npm install -g {pkg}"
+        "openclaw-user systemctl --user stop openclaw-gateway"
+        f" && npm install -g {pkg}"
         " && OC_MODULE_DIR=$(npm root -g)/openclaw"
         ' && [ -d "$OC_MODULE_DIR" ] && chown -R openclaw:openclaw "$OC_MODULE_DIR"'
         " && openclaw --version"
+        " && openclaw-user openclaw doctor --fix"
         " && openclaw-user systemctl --user restart openclaw-gateway",
+        timeout=600,
     )
     _success("Upgrade complete and gateway restarted.")
 
@@ -336,7 +341,7 @@ def fmt(c):
 # ---------------------------------------------------------------------------
 
 
-def _ssm_run(c: Context, instance_id: str, command: str):
+def _ssm_run(c: Context, instance_id: str, command: str, timeout: int = 120):
     """Run a command on the EC2 instance via SSM and stream output."""
     quoted_id = shlex.quote(instance_id)
     quoted_cmd = json.dumps([command])
@@ -360,7 +365,7 @@ def _ssm_run(c: Context, instance_id: str, command: str):
 
     command_id = result.stdout.strip()
 
-    for _ in range(60):
+    for _ in range(timeout // 2):
         time.sleep(2)
         poll = c.run(
             f"aws ssm get-command-invocation"
