@@ -56,7 +56,7 @@ COMMAND_ID=$(aws ssm send-command \
     --instance-ids "$INSTANCE_ID" \
     --document-name "AWS-RunShellScript" \
     --region "$REGION" \
-    --timeout-seconds 300 \
+    --timeout-seconds 900 \
     --parameters "commands=[
         \"set -eu\",
         \"echo '>>> Syncing from S3...'\",
@@ -88,14 +88,7 @@ COMMAND_ID=$(aws ssm send-command \
         \"chown openclaw:openclaw /opt/openclaw/github-app.pem\",
         \"echo '>>> Configuring oauth2-proxy...'\",
         \"/opt/ocs-automation/scripts/setup-oauth2-proxy.sh $DOMAIN\",
-        \"echo '>>> Running openclaw doctor --fix...'\",
-        \"openclaw-user openclaw doctor --fix || true\",
-        \"echo '>>> Patching Slack channel policy...'\",
-        \"/opt/ocs-automation/scripts/patch-slack-policy.sh\",
-        \"echo '>>> Patching gateway auth...'\",
-        \"/opt/ocs-automation/scripts/patch-gateway-auth.sh $DOMAIN\",
-        \"echo '>>> Restarting OpenClaw gateway...'\",
-        \"openclaw-user systemctl --user restart openclaw-gateway\",
+        \"/opt/ocs-automation/scripts/repair-and-restart-gateway.sh $DOMAIN\",
         \"echo '>>> Deploy complete on instance'\"
     ]" \
     --query "Command.CommandId" \
@@ -105,7 +98,7 @@ step "SSM command: ${COMMAND_ID}"
 
 # Poll for completion
 POLL_INTERVAL=3
-MAX_POLLS=120  # 6 minutes max
+MAX_POLLS=300  # 15 minutes max
 SPINNER=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
 spin_idx=0
 elapsed=0
