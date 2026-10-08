@@ -294,12 +294,12 @@ if [ ! -f "$OC_CONFIG" ]; then
   "agents": {
     "defaults": {
       "model": {
-        "primary": "anthropic/claude-sonnet-4-6",
-        "fallbacks": ["openai/gpt-5.1-codex"]
+        "primary": "anthropic/claude-sonnet-5-5",
+        "fallbacks": ["openai/gpt-6-sol"]
       },
       "models": {
-        "anthropic/claude-sonnet-4-6": { "alias": "sonnet" },
-        "openai/gpt-5.1-codex": { "alias": "GPT" }
+        "anthropic/claude-sonnet-5-5": { "alias": "sonnet" },
+        "openai/gpt-6-sol": { "alias": "GPT" }
       },
       "workspace": "/opt/openclaw/.openclaw/workspace",
       "maxConcurrent": 4,
