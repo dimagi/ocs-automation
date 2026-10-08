@@ -278,9 +278,6 @@ OPENCLAW_HOME=/opt/openclaw openclaw plugins install @openclaw/slack
 # Note: doctor --fix (run in deploy.sh) populates plugins.entries for slack,
 # memory-core, anthropic, openai, codex etc. — keep this seed minimal.
 OC_CONFIG="/opt/openclaw/.openclaw/openclaw.json"
-# Gateway token lives outside openclaw.json; the config references it via a file SecretRef.
-GATEWAY_TOKEN_FILE="/opt/openclaw/.openclaw/gateway-token"
-bash /opt/ocs-automation/scripts/sync-gateway-token.sh
 if [ ! -f "$OC_CONFIG" ]; then
     mkdir -p /opt/openclaw/.openclaw
     cat > "$OC_CONFIG" << OCJSON
@@ -377,14 +374,7 @@ if [ ! -f "$OC_CONFIG" ]; then
     "controlUi": {
       "allowedOrigins": ["https://${DOMAIN}"]
     },
-    "auth": { "token": { "source": "file", "provider": "gateway", "id": "value" } },
-    "remote": { "token": { "source": "file", "provider": "gateway", "id": "value" } },
     "trustedProxies": ["127.0.0.1"]
-  },
-  "secrets": {
-    "providers": {
-      "gateway": { "source": "file", "path": "${GATEWAY_TOKEN_FILE}", "mode": "singleValue" }
-    }
   }
 }
 OCJSON
@@ -416,6 +406,10 @@ EOF
 
 # Ensure correct ownership
 chown -R openclaw:openclaw /opt/openclaw
+
+# Gateway auth: GitHub sign-in via Caddy + oauth2-proxy (trusted-proxy mode)
+bash /opt/ocs-automation/scripts/setup-oauth2-proxy.sh "${DOMAIN}"
+bash /opt/ocs-automation/scripts/patch-gateway-auth.sh "${DOMAIN}"
 
 # Remove the system-scoped unit left by earlier bootstrap versions
 if [ -f /etc/systemd/system/openclaw-gateway.service ]; then
