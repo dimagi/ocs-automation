@@ -169,9 +169,13 @@ loginctl enable-linger openclaw
 cat > /usr/local/bin/openclaw-user << 'EOF'
 #!/bin/sh
 set -eu
+PASSWORD_FILE=/opt/openclaw/.openclaw/gateway-password
+GATEWAY_PASSWORD=""
+[ -r "$PASSWORD_FILE" ] && GATEWAY_PASSWORD=$(cat "$PASSWORD_FILE")
 exec sudo -u openclaw env \
     XDG_RUNTIME_DIR="/run/user/$(id -u openclaw)" \
     OPENCLAW_HOME=/opt/openclaw \
+    OPENCLAW_GATEWAY_PASSWORD="$GATEWAY_PASSWORD" \
     "$@"
 EOF
 chmod +x /usr/local/bin/openclaw-user
@@ -396,6 +400,7 @@ Type=simple
 Environment=OPENCLAW_HOME=/opt/openclaw
 WorkingDirectory=/opt/openclaw
 EnvironmentFile=/opt/openclaw/.env
+EnvironmentFile=-/opt/openclaw/.openclaw/gateway.systemd.env
 ExecStart=/usr/bin/openclaw gateway --port 18789
 Restart=on-failure
 RestartSec=5

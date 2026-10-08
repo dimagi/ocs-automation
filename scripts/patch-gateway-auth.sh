@@ -2,7 +2,8 @@
 # scripts/patch-gateway-auth.sh
 # Configure gateway auth for sign-in through Caddy + oauth2-proxy:
 #   - gateway.auth.mode = "trusted-proxy", identity from X-Forwarded-User (set by Caddy)
-#   - gateway.auth.password (file SecretRef) for local CLI calls that bypass the proxy
+#   - OPENCLAW_GATEWAY_PASSWORD in the gateway's env file for local CLI calls that bypass
+#     the proxy (`openclaw config` drops gateway.auth.password in trusted-proxy mode)
 #   - gateway.auth.identityScopes grants operator.admin to GATEWAY_ADMIN_EMAILS from .env
 #
 # Usage: patch-gateway-auth.sh <domain>
@@ -12,6 +13,8 @@ DOMAIN="${1:?Usage: $0 <domain>}"
 CONFIG="/opt/openclaw/.openclaw/openclaw.json"
 ENV_FILE="/opt/openclaw/.env"
 PASSWORD_FILE="/opt/openclaw/.openclaw/gateway-password"
+# Env file loaded by the gateway unit (both the bootstrap unit and OpenClaw's managed unit)
+GATEWAY_ENV_FILE="/opt/openclaw/.openclaw/gateway.systemd.env"
 
 if [ ! -f "$CONFIG" ]; then
     echo "patch-gateway-auth: $CONFIG not found, skipping."
@@ -30,6 +33,13 @@ fi
 chmod 600 "$PASSWORD_FILE"
 chown openclaw:openclaw "$PASSWORD_FILE"
 
+# Trusted-proxy auth refuses to start with a shared token in the environment
+touch "$GATEWAY_ENV_FILE"
+sed -i '/^OPENCLAW_GATEWAY_TOKEN=/d; /^OPENCLAW_GATEWAY_PASSWORD=/d' "$GATEWAY_ENV_FILE"
+echo "OPENCLAW_GATEWAY_PASSWORD=$(cat "$PASSWORD_FILE")" >> "$GATEWAY_ENV_FILE"
+chmod 600 "$GATEWAY_ENV_FILE"
+chown openclaw:openclaw "$GATEWAY_ENV_FILE"
+
 ADMINS=""
 if [ -f "$ENV_FILE" ]; then
     ADMINS=$(grep -E '^GATEWAY_ADMIN_EMAILS=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'" || true)
@@ -41,7 +51,6 @@ fi
 PATCH=$(jq -n \
     --arg domain "$DOMAIN" \
     --arg admins "$ADMINS" \
-    --arg passwordFile "$PASSWORD_FILE" \
     '{
         gateway: {
             publicOrigin: ("https://" + $domain),
@@ -49,7 +58,6 @@ PATCH=$(jq -n \
             auth: {
                 mode: "trusted-proxy",
                 token: null,
-                password: {source: "file", provider: "gateway", id: "value"},
                 trustedProxy: {
                     userHeader: "x-forwarded-user",
                     allowLoopback: true,
@@ -62,11 +70,7 @@ PATCH=$(jq -n \
             },
             remote: {token: null}
         },
-        secrets: {
-            providers: {
-                gateway: {source: "file", path: $passwordFile, mode: "singleValue"}
-            }
-        }
+        secrets: {providers: {gateway: null}}
     }')
 
 echo "patch-gateway-auth: applying patch:"
