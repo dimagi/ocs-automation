@@ -259,6 +259,25 @@ def restart(c):
     _success("Gateway restarted.")
 
 
+# Installs the latest Node 24.x release into /usr/local (where the host's node lives),
+# verifying the tarball checksum. No-op when already current.
+_NODE_UPGRADE = (
+    "NODE_BASE=https://nodejs.org/dist/latest-v24.x"
+    " && NODE_TARBALL=$(curl -fsSL $NODE_BASE/SHASUMS256.txt"
+    " | grep -o 'node-v[0-9.]*-linux-x64\\.tar\\.xz' | head -1)"
+    ' && [ -n "$NODE_TARBALL" ]'
+    ' && NODE_LATEST=$(echo "$NODE_TARBALL" | sed -E "s/node-(v[0-9.]+)-.*/\\1/")'
+    ' && if [ "$(node --version)" != "$NODE_LATEST" ]; then'
+    "   cd $(mktemp -d)"
+    '   && curl -fsSLO "$NODE_BASE/$NODE_TARBALL"'
+    '   && curl -fsSL $NODE_BASE/SHASUMS256.txt | grep " $NODE_TARBALL\\$" | sha256sum -c -'
+    '   && tar -xJf "$NODE_TARBALL" -C /usr/local --strip-components=1'
+    "   --exclude=CHANGELOG.md --exclude=LICENSE --exclude=README.md"
+    "   && cd /; fi"
+    " && node --version"
+)
+
+
 @task(help={"version": "OpenClaw version to install (default: latest)"})
 def upgrade(c, version="latest"):
     """Upgrade OpenClaw on the instance, run Doctor repairs, and restart the gateway."""
@@ -271,6 +290,7 @@ def upgrade(c, version="latest"):
         c,
         instance_id,
         "openclaw-user systemctl --user stop openclaw-gateway"
+        f" && {_NODE_UPGRADE}"
         f" && npm install -g {pkg}"
         " && OC_MODULE_DIR=$(npm root -g)/openclaw"
         ' && [ -d "$OC_MODULE_DIR" ] && chown -R openclaw:openclaw "$OC_MODULE_DIR"'
